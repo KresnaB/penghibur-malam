@@ -202,10 +202,10 @@ class MusicPlayer:
                 self.loop_mode = old_loop
 
     async def _disable_now_playing_buttons(self):
-        """Remove all buttons from the current Now Playing message."""
+        """Delete the current Now Playing message."""
         if self.now_playing_message:
             try:
-                await self.now_playing_message.edit(view=None)
+                await self.now_playing_message.delete()
             except (discord.HTTPException, Exception):
                 pass
             self.now_playing_message = None

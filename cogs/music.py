@@ -189,6 +189,9 @@ class Music(commands.Cog):
 
             return choices
 
+        except discord.NotFound:
+            # Interaction timed out or user clicked away — ignore
+            return []
         except Exception as e:
             logger.warning(f"Autocomplete error: {e}")
             return []

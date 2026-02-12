@@ -160,6 +160,9 @@ class MusicPlayer:
 
             vc.play(source, after=after_play)
 
+            # Remove buttons from previous message
+            await self._disable_now_playing_buttons()
+
             # Send Now Playing embed with buttons
             if self.text_channel:
                 embed = EmbedBuilder.now_playing(next_track)
@@ -199,24 +202,23 @@ class MusicPlayer:
                 self.loop_mode = old_loop
 
     async def _disable_now_playing_buttons(self):
-        """Disable all buttons on the current Now Playing message."""
+        """Remove all buttons from the current Now Playing message."""
         if self.now_playing_message:
             try:
-                # Create a view with all buttons disabled
-                view = discord.ui.View()
-                for item in self.now_playing_message.components[0].children if self.now_playing_message.components else []:
-                    pass
-                # Simply remove the view (remove buttons)
                 await self.now_playing_message.edit(view=None)
-                self.now_playing_message = None
             except (discord.HTTPException, Exception):
-                self.now_playing_message = None
+                pass
+            self.now_playing_message = None
 
     async def stop(self):
         """Stop playback and clear queue."""
         await self.queue.clear()
         self.current = None
         self.loop_mode = LoopMode.OFF
+        
+        # Remove buttons
+        await self._disable_now_playing_buttons()
+        
         vc = self.voice_client
         if vc and vc.is_playing():
             vc.stop()

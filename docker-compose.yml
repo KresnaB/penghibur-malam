@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  penghibur-malam:
+    build: .
+    container_name: penghibur_malam
+    restart: unless-stopped
+    volumes:
+      # Mount file cookies.txt agar bot bisa baca
+      - ./cookies.txt:/app/cookies.txt
+      # (Opsional) Persist log jika perlu
+      # - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1

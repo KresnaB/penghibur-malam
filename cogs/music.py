@@ -3,6 +3,8 @@ Music Cog — Slash commands for the music bot.
 Handles all user-facing commands and voice state events.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 

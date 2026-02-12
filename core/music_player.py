@@ -3,6 +3,8 @@ MusicPlayer — Per-guild music player state management.
 Handles playback, queue processing, idle timeout, and autoplay.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import random

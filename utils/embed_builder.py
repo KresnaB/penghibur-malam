@@ -2,6 +2,8 @@
 EmbedBuilder — Rich embed helpers for the music bot.
 """
 
+from __future__ import annotations
+
 import discord
 from core.ytdl_source import Track
 

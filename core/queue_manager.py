@@ -2,6 +2,8 @@
 QueueManager — Async queue wrapper for music tracks.
 """
 
+from __future__ import annotations
+
 import asyncio
 from typing import Optional
 from core.ytdl_source import Track

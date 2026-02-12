@@ -111,10 +111,12 @@ class NowPlayingView(ui.View):
             await self.player.stop()
             await self.player.disconnect()
 
-            # Disable all buttons
-            for item in self.children:
-                item.disabled = True
-            await interaction.edit_original_response(view=self)
+            # Send stopped confirmation
+            embed = EmbedBuilder.info(
+                "⏹️ Pemutaran Selesai",
+                "Queue dikosongkan dan pemutaran dihentikan."
+            )
+            await interaction.followup.send(embed=embed)
         except Exception:
             pass
 

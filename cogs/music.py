@@ -68,13 +68,14 @@ class Music(commands.Cog):
 
     # ─────────────────────── /play ───────────────────────
 
-    @app_commands.command(name="play", description="Putar lagu dari YouTube (URL atau pencarian)")
-    @app_commands.describe(query="YouTube URL atau kata kunci pencarian")
+    @app_commands.command(name="play", description="Putar lagu dari YouTube (URL, Playlist, atau pencarian)")
+    @app_commands.describe(query="YouTube URL, Playlist URL, atau kata kunci pencarian")
     async def play(self, interaction: discord.Interaction, query: str):
-        """Play a track from YouTube URL or search query."""
+        """Play a track or playlist from YouTube."""
         if not await self._ensure_voice(interaction):
             return
 
+        # Defer immediately because playlist extraction can take time
         await interaction.response.defer()
 
         player = self.get_player(interaction.guild)
@@ -89,40 +90,81 @@ class Music(commands.Cog):
             )
             return
 
-        # Extract track info
+        # Extract track(s) info
         try:
-            _, data = await YTDLSource.from_url(query, loop=self.bot.loop)
-
-            track = Track(
-                source_url=data.get('url', ''),
-                title=data.get('title', 'Unknown'),
-                url=data.get('webpage_url', query),
-                duration=data.get('duration', 0),
-                thumbnail=data.get('thumbnail', ''),
-                uploader=data.get('uploader', 'Unknown'),
-                requester=interaction.user
-            )
-
+            entries, playlist_title = await YTDLSource.get_info(query, loop=self.bot.loop)
         except Exception as e:
             await interaction.followup.send(
                 embed=EmbedBuilder.error(f"Gagal mencari lagu: `{e}`")
             )
             return
 
-        # If already playing, add to queue
-        if player.is_playing or player.current:
-            position = await player.add_track(track)
-            embed = EmbedBuilder.added_to_queue(track, position)
-            await interaction.followup.send(embed=embed)
-        else:
-            # Start playing immediately
-            await player.add_track(track)
+        if not entries:
             await interaction.followup.send(
-                embed=EmbedBuilder.success(
-                    "🎵 Memulai Pemutaran",
-                    f"**[{track.title}]({track.url})**"
-                )
+                embed=EmbedBuilder.error("Tidak ditemukan lagu.")
             )
+            return
+
+        # Process entries
+        added_tracks = []
+        for entry in entries:
+            # Normalize URL
+            web_url = entry.get('webpage_url')
+            if not web_url:
+                if entry.get('url'):
+                    if len(entry['url']) == 11:  # Video ID
+                        web_url = f"https://www.youtube.com/watch?v={entry['url']}"
+                    else:
+                        web_url = entry['url']
+                elif entry.get('id'):
+                    web_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                else:
+                    continue # Skip invalid entry
+            
+            track = Track(
+                source_url="",  # Will be fetched when playing
+                title=entry.get('title', 'Unknown'),
+                url=web_url,
+                duration=entry.get('duration', 0),
+                thumbnail=entry.get('thumbnail', ''),
+                uploader=entry.get('uploader', 'Unknown'),
+                requester=interaction.user
+            )
+            added_tracks.append(track)
+
+        if not added_tracks:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Gagal memproses lagu dari playlist.")
+            )
+            return
+
+        # Add to queue
+        for track in added_tracks:
+            position = await player.add_track(track)
+
+        # Notify user
+        if len(added_tracks) == 1:
+            track = added_tracks[0]
+            if player.is_playing or player.current:
+                embed = EmbedBuilder.added_to_queue(track, position)
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.success(
+                        "🎵 Memulai Pemutaran",
+                        f"**[{track.title}]({track.url})**"
+                    )
+                )
+        else:
+            # Playlist added
+            embed = EmbedBuilder.success(
+                "📜 Playlist Ditambahkan",
+                f"Menambahkan **{len(added_tracks)}** lagu dari **{playlist_title or 'Playlist'}** ke queue."
+            )
+            await interaction.followup.send(embed=embed)
+
+        # Start playback if idle
+        if not player.is_playing and not player.current:
             await player.play_next()
 
 

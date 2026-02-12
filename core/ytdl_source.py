@@ -74,25 +74,69 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.uploader = data.get('uploader', 'Unknown')
 
     @classmethod
-    async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+    async def get_info(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
         """
-        Extract audio from a YouTube URL or search query.
-        Returns (YTDLSource, data_dict).
+        Extract track info without downloading audio.
+        Handles playlists and single tracks.
+        Returns (list_of_entries, playlist_title).
         """
         loop = loop or asyncio.get_event_loop()
 
-        # Determine if it's a URL or search query
-        if not query.startswith(('http://', 'https://')):
+        # Check if it's a search query
+        is_search = not query.startswith(('http://', 'https://'))
+        if is_search:
             query = f'ytsearch1:{query}'
+
+        # Options: allow playlist, extract flat for speed
+        opts = YTDL_FORMAT_OPTIONS.copy()
+        opts['noplaylist'] = False
+        # For playlists, we want to extract entries quickly
+        # But for search, we want full info
+        if not is_search and 'list=' in query:
+             opts['extract_flat'] = 'in_playlist'
+
+        ydl = yt_dlp.YoutubeDL(opts)
+        data = await loop.run_in_executor(
+            None, lambda: ydl.extract_info(query, download=False)
+        )
+
+        if not data:
+            raise ValueError("Tidak ditemukan data.")
+
+        entries = []
+        is_playlist = False
+        playlist_title = data.get('title', 'Unknown Playlist')
+
+        if 'entries' in data:
+            # It's a playlist or search result
+            if is_search:
+                # Search result: take first one, full info
+                entries = [data['entries'][0]] if data['entries'] else []
+            else:
+                # Playlist URL
+                is_playlist = True
+                entries = data['entries']
+        else:
+            # Single video
+            entries = [data]
+
+        if not entries:
+            raise ValueError("Tidak ditemukan hasil.")
+            
+        return entries, (playlist_title if is_playlist else None)
+
+    @classmethod
+    async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+        """
+        Create audio source from a SPECIFIC URL (used by player).
+        """
+        loop = loop or asyncio.get_event_loop()
 
         data = await loop.run_in_executor(
             None, lambda: ytdl.extract_info(query, download=False)
         )
 
-        # If search results, take the first entry
         if 'entries' in data:
-            if not data['entries']:
-                raise ValueError("Tidak ditemukan hasil untuk pencarian tersebut.")
             data = data['entries'][0]
 
         source_url = data.get('url')

@@ -76,10 +76,20 @@ class EmbedBuilder:
         if tracks:
             queue_text = ""
             for i, track in enumerate(tracks, 1):
-                queue_text += f"`{i}.` **[{track.title}]({track.url})** [{track.duration_str}]\n"
+                # Truncate title to avoid 1024 char limit
+                title = track.title
+                if len(title) > 40:
+                    title = title[:37] + "..."
+                
+                line = f"`{i}.` **[{title}]({track.url})** [{track.duration_str}]\n"
+                queue_text += line
 
             if total_size > len(tracks):
                 queue_text += f"\n*... dan {total_size - len(tracks)} lagu lainnya*"
+
+            # Safety check
+            if len(queue_text) > 1024:
+                queue_text = queue_text[:1021] + "..."
 
             embed.add_field(
                 name=f"📋 Antrian ({total_size} lagu)",

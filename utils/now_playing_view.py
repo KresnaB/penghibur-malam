@@ -153,5 +153,12 @@ class NowPlayingView(ui.View):
             total = self.player.queue.size
             embed = EmbedBuilder.queue_list(tracks, self.player.current, total)
             await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Queue button error: {e}")
+            try:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error("Gagal memuat queue (error)."),
+                    ephemeral=True
+                )
+            except:
+                pass

@@ -156,15 +156,11 @@ class Music(commands.Cog):
                     )
                 )
         else:
-            # Playlist added: Show queue
-            tracks = player.queue.as_list(limit=10)
-            total = player.queue.size
-            embed = EmbedBuilder.queue_list(tracks, player.current, total)
-            embed.title = f"📜 Playlist Ditambahkan: {playlist_title}"
-            embed.description = f"**{len(added_tracks)}** lagu baru ditambahkan.\n" + (embed.description or "")
-            if not embed.description.strip():
-                 embed.description = None # avoid empty string desc
-
+            # Playlist added
+            embed = EmbedBuilder.success(
+                "📜 Playlist Ditambahkan",
+                f"Menambahkan **{len(added_tracks)}** lagu dari **{playlist_title or 'Playlist'}** ke queue."
+            )
             await interaction.followup.send(embed=embed)
 
         # Start playback if idle

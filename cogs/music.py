@@ -137,6 +137,22 @@ class Music(commands.Cog):
         if current.startswith(('http://', 'https://')):
             return []
 
+        # Simple cache implementation
+        if not hasattr(self, '_autocomplete_cache'):
+            self._autocomplete_cache = {}  # query -> (timestamp, choices)
+
+        # Clean old cache (older than 60s)
+        import time
+        now = time.time()
+        self._autocomplete_cache = {
+            k: v for k, v in self._autocomplete_cache.items()
+            if now - v[0] < 60
+        }
+
+        # Check cache
+        if current in self._autocomplete_cache:
+            return self._autocomplete_cache[current][1]
+
         try:
             import yt_dlp
 
@@ -148,6 +164,11 @@ class Music(commands.Cog):
                 'extract_flat': True,
                 'default_search': 'auto',
                 'source_address': '0.0.0.0',
+                # Use cookies if available to avoid 403 in search too
+                'cookiefile': 'cookies.txt',
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                }
             }
 
             ydl = yt_dlp.YoutubeDL(opts)
@@ -187,10 +208,11 @@ class Music(commands.Cog):
 
                     choices.append(app_commands.Choice(name=display, value=url))
 
+            # Store in cache
+            self._autocomplete_cache[current] = (now, choices)
             return choices
 
         except discord.NotFound:
-            # Interaction timed out or user clicked away — ignore
             return []
         except Exception as e:
             logger.warning(f"Autocomplete error: {e}")

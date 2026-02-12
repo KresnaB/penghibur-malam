@@ -77,33 +77,46 @@ class NowPlayingView(ui.View):
     @ui.button(emoji="⏭️", label="Skip", style=discord.ButtonStyle.primary, row=0)
     async def btn_skip(self, interaction: discord.Interaction, button: ui.Button):
         """Skip current track."""
-        if self.player.current:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.success(
-                    "⏭️ Skipped",
-                    f"**{self.player.current.title}**"
-                ),
-                ephemeral=True
-            )
-            await self.player.skip()
-        else:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
-                ephemeral=True
-            )
+        try:
+            # Defer immediately to avoid timeout
+            await interaction.response.defer(ephemeral=True)
+            
+            if self.player.current:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.success(
+                        "⏭️ Skipped",
+                        f"**{self.player.current.title}**"
+                    ),
+                    ephemeral=True
+                )
+                await self.player.skip()
+            else:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                    ephemeral=True
+                )
+        except discord.NotFound:
+            pass  # Interaction died, just ignore
+        except Exception as e:
+            pass # Ignore other errors to keep bot alive
 
     # ─────────── Stop ───────────
 
     @ui.button(emoji="⏹️", label="Stop", style=discord.ButtonStyle.danger, row=0)
     async def btn_stop(self, interaction: discord.Interaction, button: ui.Button):
         """Stop playback."""
-        await self.player.stop()
-        await self.player.disconnect()
+        try:
+            # Defer to allow time for disconnect
+            await interaction.response.defer()
+            await self.player.stop()
+            await self.player.disconnect()
 
-        # Disable all buttons
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(view=self)
+            # Disable all buttons
+            for item in self.children:
+                item.disabled = True
+            await interaction.edit_original_response(view=self)
+        except Exception:
+            pass
 
     # ─────────── Loop ───────────
 
@@ -132,7 +145,11 @@ class NowPlayingView(ui.View):
     @ui.button(emoji="📜", label="Queue", style=discord.ButtonStyle.secondary, row=1)
     async def btn_queue(self, interaction: discord.Interaction, button: ui.Button):
         """Show the queue."""
-        tracks = self.player.queue.as_list(limit=10)
-        total = self.player.queue.size
-        embed = EmbedBuilder.queue_list(tracks, self.player.current, total)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        try:
+            await interaction.response.defer(ephemeral=True)
+            tracks = self.player.queue.as_list(limit=10)
+            total = self.player.queue.size
+            embed = EmbedBuilder.queue_list(tracks, self.player.current, total)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        except Exception:
+            pass

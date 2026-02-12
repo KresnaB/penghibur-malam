@@ -19,11 +19,12 @@ YTDL_FORMAT_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
-    # Anti-blocking options
+    # Anti-blocking options: Use Android client
     'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.youtube.com/',
-    }
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Referer': 'https://music.youtube.com/',
+    },
+    'username': 'oauth2',  # Use OAuth2 if possible, or fallbacks
 }
 
 FFMPEG_OPTIONS = {

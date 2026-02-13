@@ -94,6 +94,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         # But for search, we want full info
         if not is_search and 'list=' in query:
              opts['extract_flat'] = 'in_playlist'
+             opts['playlistend'] = 50  # Limit to 50 songs max
 
         ydl = yt_dlp.YoutubeDL(opts)
         data = await loop.run_in_executor(
@@ -115,7 +116,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
             else:
                 # Playlist URL
                 is_playlist = True
-                entries = data['entries']
+                all_entries = list(data['entries'])
+                entries = all_entries[:50]  # Cap at 50 songs
         else:
             # Single video
             entries = [data]
@@ -124,6 +126,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             raise ValueError("Tidak ditemukan hasil.")
             
         return entries, (playlist_title if is_playlist else None)
+
 
     @classmethod
     async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):

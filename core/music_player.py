@@ -41,6 +41,7 @@ class MusicPlayer:
         self._view_factory = None  # Callback to create NowPlayingView
         self._idle_task: asyncio.Task | None = None
         self._playing = asyncio.Event()
+        self._play_history: list[str] = []  # Track URLs that have been played
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -143,12 +144,26 @@ class MusicPlayer:
                 return
 
         self.current = next_track
+        # Track play history for autoplay deduplication
+        if next_track.url:
+            self._play_history.append(next_track.url)
+            # Keep history capped at 50
+            if len(self._play_history) > 50:
+                self._play_history = self._play_history[-50:]
 
         try:
-            # Create fresh audio source
-            source, _ = await YTDLSource.from_url(
-                next_track.url, loop=self.bot.loop
-            )
+            # Create audio source — reuse source_url if already extracted
+            if next_track.source_url:
+                source = discord.FFmpegPCMAudio(
+                    next_track.source_url,
+                    before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+                    options='-vn'
+                )
+                source = discord.PCMVolumeTransformer(source, volume=0.5)
+            else:
+                source, _ = await YTDLSource.from_url(
+                    next_track.url, loop=self.bot.loop
+                )
 
             def after_play(error):
                 if error:
@@ -215,6 +230,7 @@ class MusicPlayer:
         await self.queue.clear()
         self.current = None
         self.loop_mode = LoopMode.OFF
+        self._play_history.clear()
         
         # Remove buttons
         await self._disable_now_playing_buttons()
@@ -241,8 +257,18 @@ class MusicPlayer:
                 logger.warning('Autoplay: no related tracks found')
                 return None
 
-            # Pick a random one from the results
-            chosen = random.choice(related)
+            # Filter out songs that have already been played
+            fresh = [
+                r for r in related
+                if (r['url'] if isinstance(r, dict) else r) not in self._play_history
+            ]
+
+            if not fresh:
+                logger.info('Autoplay: all related tracks already played, using full list')
+                fresh = related  # Fallback if everything was played
+
+            # Pick a random one from the filtered results
+            chosen = random.choice(fresh)
             chosen_url = chosen['url'] if isinstance(chosen, dict) else chosen
 
             logger.info(f'Autoplay: chose "{chosen.get("title", chosen_url) if isinstance(chosen, dict) else chosen_url}"')

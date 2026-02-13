@@ -6,18 +6,22 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 
 | Command | Deskripsi |
 |---------|-----------|
-| `/play <query>` | Putar lagu (YouTube URL atau keyword) |
+| `/play <query>` | Putar lagu (YouTube URL, Playlist, atau keyword) |
 | `/skip` | Skip lagu saat ini |
 | `/stop` | Stop dan disconnect |
 | `/queue` | Lihat antrian lagu |
 | `/nowplaying` | Info lagu yang diputar |
 | `/loop <off\|single\|queue>` | Atur mode loop |
 | `/autoplay` | Toggle autoplay rekomendasi |
+| `/status` | Tampilkan status bot |
+| `/help` | Tampilkan daftar command |
 
 ### 🔧 Fitur Otomatis
 - **Auto disconnect** saat idle 3 menit
 - **Auto disconnect** saat sendirian di VC
-- **Autoplay** memutar lagu terkait otomatis jika diaktifkan
+- **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
+- **Playlist limit** maksimal 50 lagu per request
+- **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
 
 ## 📦 Instalasi
 
@@ -42,11 +46,18 @@ DISCORD_TOKEN=token_bot_discord_kamu
 python main.py
 ```
 
+### 5. Jalankan dengan Docker
+```bash
+docker-compose up -d --build
+```
+
 ## 🏗️ Struktur Project
 
 ```
 penghibur-malam/
 ├── main.py              # Entry point
+├── Dockerfile           # Docker image
+├── docker-compose.yml   # Docker Compose
 ├── cogs/
 │   └── music.py         # Slash commands
 ├── core/
@@ -62,3 +73,4 @@ penghibur-malam/
 - **yt-dlp** (YouTube extraction)
 - **FFmpeg** (audio streaming)
 - **PyNaCl** (voice encryption)
+- **Docker** (containerization)

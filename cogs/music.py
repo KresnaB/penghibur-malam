@@ -121,8 +121,10 @@ class Music(commands.Cog):
                 else:
                     continue # Skip invalid entry
             
+            # For non-playlist entries, source URL is already available
+            source_url = entry.get('url', '') if not playlist_title else ''
             track = Track(
-                source_url="",  # Will be fetched when playing
+                source_url=source_url,
                 title=entry.get('title', 'Unknown'),
                 url=web_url,
                 duration=entry.get('duration', 0),
@@ -157,9 +159,12 @@ class Music(commands.Cog):
                 )
         else:
             # Playlist added
+            desc = f"Menambahkan **{len(added_tracks)}** lagu dari **{playlist_title or 'Playlist'}** ke queue."
+            if len(added_tracks) >= 50:
+                desc += "\n⚠️ Playlist dibatasi maksimal **50 lagu**. Sisanya tidak dimasukkan."
             embed = EmbedBuilder.success(
                 "📜 Playlist Ditambahkan",
-                f"Menambahkan **{len(added_tracks)}** lagu dari **{playlist_title or 'Playlist'}** ke queue."
+                desc
             )
             await interaction.followup.send(embed=embed)
 
@@ -313,6 +318,95 @@ class Music(commands.Cog):
         await interaction.response.send_message(
             embed=EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
         )
+
+    # ─────────────────────── /status ───────────────────────
+
+    @app_commands.command(name="status", description="Tampilkan status bot musik")
+    async def status(self, interaction: discord.Interaction):
+        """Show the bot's current status."""
+        player = self.get_player(interaction.guild)
+        vc = interaction.guild.voice_client
+
+        embed = discord.Embed(
+            title="🤖 Status Bot Musik",
+            color=discord.Color.from_rgb(138, 43, 226)
+        )
+
+        # Connection status
+        if vc and vc.is_connected():
+            embed.add_field(
+                name="🔊 Voice Channel",
+                value=vc.channel.name,
+                inline=True
+            )
+            members = [m.display_name for m in vc.channel.members if not m.bot]
+            embed.add_field(
+                name="👥 Pendengar",
+                value=", ".join(members) if members else "Tidak ada",
+                inline=True
+            )
+        else:
+            embed.add_field(
+                name="🔇 Voice Channel",
+                value="Tidak terhubung",
+                inline=True
+            )
+
+        # Current track
+        if player.current:
+            title = player.current.title
+            if len(title) > 40:
+                title = title[:37] + "..."
+            embed.add_field(
+                name="🎵 Sedang Diputar",
+                value=f"**[{title}]({player.current.url})** [{player.current.duration_str}]",
+                inline=False
+            )
+        else:
+            embed.add_field(name="🎵 Sedang Diputar", value="Tidak ada", inline=False)
+
+        # Queue
+        embed.add_field(name="📋 Queue", value=f"{player.queue.size} lagu", inline=True)
+
+        # Loop mode
+        loop_icons = {"off": "🚫 Off", "single": "🔂 Single", "queue": "🔁 Queue"}
+        embed.add_field(
+            name="🔁 Loop",
+            value=loop_icons.get(player.loop_mode, player.loop_mode),
+            inline=True
+        )
+
+        # Autoplay
+        embed.add_field(
+            name="🔄 Autoplay",
+            value="ON 🟢" if player.autoplay else "OFF 🔴",
+            inline=True
+        )
+
+        embed.set_footer(text="Omnia Music 🎶")
+        await interaction.response.send_message(embed=embed)
+
+    # ─────────────────────── /help ───────────────────────
+
+    @app_commands.command(name="help", description="Tampilkan daftar command bot musik")
+    async def help(self, interaction: discord.Interaction):
+        """Show all available commands."""
+        embed = discord.Embed(
+            title="📖 Daftar Command Omnia Music",
+            description="Berikut adalah command yang tersedia:",
+            color=discord.Color.from_rgb(138, 43, 226)
+        )
+        embed.add_field(name="/play `<query>`", value="Putar lagu dari YouTube (URL, Playlist, atau pencarian)", inline=False)
+        embed.add_field(name="/skip", value="Skip lagu yang sedang diputar", inline=False)
+        embed.add_field(name="/stop", value="Stop pemutaran dan kosongkan queue", inline=False)
+        embed.add_field(name="/queue", value="Tampilkan antrian lagu", inline=False)
+        embed.add_field(name="/nowplaying", value="Tampilkan lagu yang sedang diputar", inline=False)
+        embed.add_field(name="/loop `<mode>`", value="Atur mode loop (Off / Single / Queue)", inline=False)
+        embed.add_field(name="/autoplay", value="Toggle autoplay rekomendasi otomatis", inline=False)
+        embed.add_field(name="/status", value="Tampilkan status bot musik", inline=False)
+        embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
+        embed.set_footer(text="Omnia Music 🎶")
+        await interaction.response.send_message(embed=embed)
 
     # ─────────────────────── Voice State Listener ───────────────────────
 

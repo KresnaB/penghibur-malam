@@ -45,7 +45,7 @@ class Track:
         self.source_url = source_url
         self.title = title
         self.url = url
-        self.duration = duration
+        self.duration = int(duration) if duration else 0
         self.thumbnail = thumbnail
         self.uploader = uploader
         self.requester = requester

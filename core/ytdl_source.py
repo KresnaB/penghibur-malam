@@ -4,6 +4,7 @@ Handles YouTube URL extraction and keyword search.
 """
 
 import asyncio
+import re
 import discord
 import yt_dlp
 
@@ -91,11 +92,19 @@ class YTDLSource(discord.PCMVolumeTransformer):
         # Options: allow playlist, extract flat for speed
         opts = YTDL_FORMAT_OPTIONS.copy()
         opts['noplaylist'] = False
-        # For playlists, we want to extract entries quickly
-        # But for search, we want full info
-        if not is_search and 'list=' in query:
-             opts['extract_flat'] = 'in_playlist'
-             opts['playlistend'] = 50  # Limit to 50 songs max
+
+        # Detect YouTube Radio/Mix URLs (list=RD...) — treat as single song
+        is_radio = not is_search and 'list=RD' in query
+        if is_radio:
+            # Extract just the video ID and play as single song
+            video_match = re.search(r'[?&]v=([^&]+)', query)
+            if video_match:
+                query = f'https://www.youtube.com/watch?v={video_match.group(1)}'
+            opts['noplaylist'] = True
+        elif not is_search and 'list=' in query:
+            # Regular playlist: extract flat for speed
+            opts['extract_flat'] = 'in_playlist'
+            opts['playlistend'] = 50  # Limit to 50 songs max
 
         ydl = yt_dlp.YoutubeDL(opts)
         data = await loop.run_in_executor(

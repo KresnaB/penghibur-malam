@@ -36,7 +36,7 @@ class EmbedBuilder:
         )
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
-        embed.set_footer(text="Antigrafity Music 🎶")
+        embed.set_footer(text="Omnia Music 🎶")
         return embed
 
     @staticmethod
@@ -103,7 +103,7 @@ class EmbedBuilder:
                 inline=False
             )
 
-        embed.set_footer(text="Antigrafity Music 🎶")
+        embed.set_footer(text="Omnia Music 🎶")
         return embed
 
     @staticmethod
@@ -118,7 +118,7 @@ class EmbedBuilder:
         embed.add_field(name="🎤 Uploader", value=track.uploader, inline=True)
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
-        embed.set_footer(text="Autoplay • Antigrafity Music 🎶")
+        embed.set_footer(text="Autoplay • Omnia Music 🎶")
         return embed
 
     @staticmethod

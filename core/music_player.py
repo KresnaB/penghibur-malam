@@ -84,6 +84,10 @@ class MusicPlayer:
     async def disconnect(self):
         """Disconnect from voice and cleanup."""
         self._cancel_idle_timer()
+        
+        # Ensure buttons are removed
+        await self._disable_now_playing_buttons()
+        
         vc = self.voice_client
         if vc and vc.is_connected():
             if vc.is_playing():
@@ -312,6 +316,9 @@ class MusicPlayer:
         try:
             await asyncio.sleep(self.IDLE_TIMEOUT)
             if not self.is_playing and self.voice_client:
+                # Disable buttons FIRST
+                await self._disable_now_playing_buttons()
+
                 if self.text_channel:
                     embed = EmbedBuilder.info(
                         "⏹️ Auto Disconnect",

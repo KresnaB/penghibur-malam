@@ -54,7 +54,8 @@ class Track:
         """Format duration as MM:SS or HH:MM:SS."""
         if not self.duration:
             return "Live"
-        hours, remainder = divmod(self.duration, 3600)
+        total = int(self.duration)
+        hours, remainder = divmod(total, 3600)
         minutes, seconds = divmod(remainder, 60)
         if hours:
             return f"{hours}:{minutes:02d}:{seconds:02d}"

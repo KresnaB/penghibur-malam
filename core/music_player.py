@@ -173,23 +173,12 @@ class MusicPlayer:
                     self.play_next(), self.bot.loop
                 )
 
+            # Stop if somehow already playing
+            if vc.is_playing():
+                vc.stop()
+                await asyncio.sleep(0.5)
+
             vc.play(source, after=after_play)
-
-            # Remove buttons from previous message
-            await self._disable_now_playing_buttons()
-
-            # Send Now Playing embed with buttons
-            if self.text_channel:
-                embed = EmbedBuilder.now_playing(next_track)
-                try:
-                    view = None
-                    if self._view_factory:
-                        view = self._view_factory(self)
-                    self.now_playing_message = await self.text_channel.send(
-                        embed=embed, view=view
-                    )
-                except discord.HTTPException:
-                    pass
 
         except Exception as e:
             logger.error(f'Error playing track: {e}')
@@ -201,6 +190,21 @@ class MusicPlayer:
                     pass
             # Try next track
             await self.play_next()
+            return
+
+        # Send embed OUTSIDE the try block — embed errors won't trigger play_next
+        try:
+            await self._disable_now_playing_buttons()
+            if self.text_channel:
+                embed = EmbedBuilder.now_playing(next_track)
+                view = None
+                if self._view_factory:
+                    view = self._view_factory(self)
+                self.now_playing_message = await self.text_channel.send(
+                    embed=embed, view=view
+                )
+        except Exception as e:
+            logger.warning(f'Error sending now playing embed: {e}')
 
     async def skip(self):
         """Skip the current track."""

@@ -13,6 +13,7 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 | `/nowplaying` | Info lagu yang diputar |
 | `/loop <off\|single\|queue>` | Atur mode loop |
 | `/autoplay` | Toggle autoplay rekomendasi |
+| `/lyrics [query]` | Cari lirik lagu dari Genius |
 | `/status` | Tampilkan status bot |
 | `/help` | Tampilkan daftar command |
 
@@ -22,6 +23,7 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 - **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
 - **Playlist limit** maksimal 50 lagu per request
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
+- **Lyrics** cari lirik lagu via Genius API (tombol 🎤 di Now Playing + `/lyrics`)
 
 ## 📦 Instalasi
 
@@ -39,6 +41,7 @@ pip install -r requirements.txt
 Edit file `.env`:
 ```
 DISCORD_TOKEN=token_bot_discord_kamu
+GENIUS_ACCESS_TOKEN=token_genius_api_kamu
 ```
 
 ### 4. Jalankan
@@ -65,7 +68,9 @@ penghibur-malam/
 │   ├── queue_manager.py # Queue system
 │   └── ytdl_source.py   # yt-dlp wrapper
 └── utils/
-    └── embed_builder.py # Rich embeds
+    ├── embed_builder.py   # Rich embeds
+    ├── genius_lyrics.py   # Genius lyrics fetcher
+    └── now_playing_view.py # Player buttons
 ```
 
 ## 📋 Teknologi
@@ -73,4 +78,5 @@ penghibur-malam/
 - **yt-dlp** (YouTube extraction)
 - **FFmpeg** (audio streaming)
 - **PyNaCl** (voice encryption)
+- **lyricsgenius** (Genius API lyrics)
 - **Docker** (containerization)

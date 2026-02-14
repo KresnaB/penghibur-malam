@@ -29,7 +29,7 @@ def _get_genius():
             verbose=False,
             remove_section_headers=False,
             skip_non_songs=True,
-            timeout=10,
+            timeout=30,
         )
     return _genius
 
@@ -77,21 +77,31 @@ def _clean_title(title: str) -> str:
 
 def _search_lyrics_sync(query: str) -> dict | None:
     """
-    Synchronous Genius search. Returns dict with title, artist, lyrics, url, thumbnail.
+    Synchronous Genius search with retry logic.
+    Returns dict with title, artist, lyrics, url, thumbnail.
     """
-    try:
-        genius = _get_genius()
-        song = genius.search_song(query)
-        if song:
-            return {
-                'title': song.title,
-                'artist': song.artist,
-                'lyrics': song.lyrics,
-                'url': song.url,
-                'thumbnail': song.song_art_image_thumbnail_url if hasattr(song, 'song_art_image_thumbnail_url') else '',
-            }
-    except Exception as e:
-        logger.error(f"Genius search error: {e}")
+    import time
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        try:
+            genius = _get_genius()
+            song = genius.search_song(query)
+            if song:
+                return {
+                    'title': song.title,
+                    'artist': song.artist,
+                    'lyrics': song.lyrics,
+                    'url': song.url,
+                    'thumbnail': song.song_art_image_thumbnail_url if hasattr(song, 'song_art_image_thumbnail_url') else '',
+                }
+            return None  # Song not found, no need to retry
+        except Exception as e:
+            logger.warning(f"Genius search attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1))  # Backoff: 2s, 4s
+            else:
+                logger.error(f"Genius search failed after {max_retries} attempts: {e}")
     return None
 
 

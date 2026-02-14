@@ -2,3 +2,4 @@ discord.py>=2.3.0
 git+https://github.com/yt-dlp/yt-dlp.git@master
 python-dotenv
 PyNaCl
+lyricsgenius

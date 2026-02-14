@@ -7,6 +7,7 @@ import discord
 from discord import ui
 
 from utils.embed_builder import EmbedBuilder
+from utils.genius_lyrics import search_lyrics, split_lyrics
 
 
 class NowPlayingView(ui.View):
@@ -158,6 +159,66 @@ class NowPlayingView(ui.View):
             try:
                 await interaction.followup.send(
                     embed=EmbedBuilder.error("Gagal memuat queue (error)."),
+                    ephemeral=True
+                )
+            except:
+                pass
+
+    # ─────────── Lyrics ───────────
+
+    @ui.button(emoji="🎤", label="Lyrics", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_lyrics(self, interaction: discord.Interaction, button: ui.Button):
+        """Fetch lyrics for the current track."""
+        try:
+            await interaction.response.defer(ephemeral=True)
+
+            if not self.player.current:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                    ephemeral=True
+                )
+                return
+
+            # Search lyrics
+            result = await search_lyrics(self.player.current.title)
+
+            if not result:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error(
+                        f"Lirik tidak ditemukan untuk: **{self.player.current.title}**"
+                    ),
+                    ephemeral=True
+                )
+                return
+
+            # Build and send lyrics embed(s)
+            lyrics_text = result['lyrics']
+            chunks = split_lyrics(lyrics_text, max_length=4096)
+
+            for i, chunk in enumerate(chunks):
+                embed = discord.Embed(
+                    title=f"🎤 {result['title']}" if i == 0 else f"🎤 {result['title']} (lanjutan)",
+                    description=chunk,
+                    color=discord.Color.from_rgb(255, 255, 100)
+                )
+                if i == 0:
+                    embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
+                    embed.add_field(
+                        name="🔗 Genius",
+                        value=f"[Lihat di Genius]({result['url']})",
+                        inline=True
+                    )
+                    if result.get('thumbnail'):
+                        embed.set_thumbnail(url=result['thumbnail'])
+                embed.set_footer(text="Omnia Music 🎶 • Lyrics powered by Genius")
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            print(f"Lyrics button error: {e}")
+            try:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error("Gagal memuat lirik."),
                     ephemeral=True
                 )
             except:

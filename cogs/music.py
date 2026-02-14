@@ -16,6 +16,7 @@ from core.music_player import MusicPlayer, LoopMode
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
 from utils.now_playing_view import NowPlayingView
+from utils.genius_lyrics import search_lyrics, split_lyrics
 
 logger = logging.getLogger('antigrafity.music')
 
@@ -268,6 +269,65 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    # ─────────────────────── /lyrics ───────────────────────
+
+    @app_commands.command(name="lyrics", description="Cari lirik lagu dari Genius")
+    @app_commands.describe(query="Judul lagu (kosongkan untuk lagu yang sedang diputar)")
+    async def lyrics(self, interaction: discord.Interaction, query: str = None):
+        """Search for song lyrics on Genius."""
+        await interaction.response.defer()
+
+        # Determine search query
+        search_query = query
+        if not search_query:
+            player = self.get_player(interaction.guild)
+            if player.current:
+                search_query = player.current.title
+            else:
+                await interaction.followup.send(
+                    embed=EmbedBuilder.error(
+                        "Tidak ada lagu yang sedang diputar!\n"
+                        "Gunakan `/lyrics query:<judul lagu>` untuk mencari lirik."
+                    ),
+                    ephemeral=True
+                )
+                return
+
+        # Search Genius
+        result = await search_lyrics(search_query, loop=self.bot.loop)
+
+        if not result:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(
+                    f"Lirik tidak ditemukan untuk: **{search_query}**\n"
+                    "Coba gunakan `/lyrics query:<judul lagu>` dengan kata kunci yang lebih spesifik."
+                )
+            )
+            return
+
+        # Build lyrics embed(s)
+        lyrics_text = result['lyrics']
+        chunks = split_lyrics(lyrics_text, max_length=4096)
+
+        for i, chunk in enumerate(chunks):
+            embed = discord.Embed(
+                title=f"🎤 {result['title']}" if i == 0 else f"🎤 {result['title']} (lanjutan)",
+                description=chunk,
+                color=discord.Color.from_rgb(255, 255, 100)  # Genius yellow
+            )
+            if i == 0:
+                embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
+                embed.add_field(
+                    name="🔗 Genius",
+                    value=f"[Lihat di Genius]({result['url']})",
+                    inline=True
+                )
+                if result.get('thumbnail'):
+                    embed.set_thumbnail(url=result['thumbnail'])
+            embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by Genius")
+
+            await interaction.followup.send(embed=embed)
+
     # ─────────────────────── /loop ───────────────────────
 
     @app_commands.command(name="loop", description="Atur mode loop")
@@ -403,6 +463,7 @@ class Music(commands.Cog):
         embed.add_field(name="/nowplaying", value="Tampilkan lagu yang sedang diputar", inline=False)
         embed.add_field(name="/loop `<mode>`", value="Atur mode loop (Off / Single / Queue)", inline=False)
         embed.add_field(name="/autoplay", value="Toggle autoplay rekomendasi otomatis", inline=False)
+        embed.add_field(name="/lyrics `[query]`", value="Cari lirik lagu dari Genius (kosongkan untuk lagu saat ini)", inline=False)
         embed.add_field(name="/status", value="Tampilkan status bot musik", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
         embed.set_footer(text="Omnia Music 🎶")

@@ -170,7 +170,7 @@ class NowPlayingView(ui.View):
     async def btn_lyrics(self, interaction: discord.Interaction, button: ui.Button):
         """Fetch lyrics for the current track."""
         try:
-            await interaction.response.defer(ephemeral=True)
+            await interaction.response.defer()
 
             if not self.player.current:
                 await interaction.followup.send(
@@ -179,6 +179,16 @@ class NowPlayingView(ui.View):
                 )
                 return
 
+            # Disable button to prevent spam
+            self.btn_lyrics.disabled = True
+            self.btn_lyrics.label = "Lyrics ✓"
+            self.btn_lyrics.style = discord.ButtonStyle.success
+            try:
+                if self.player.now_playing_message:
+                    await self.player.now_playing_message.edit(view=self)
+            except Exception:
+                pass
+
             # Search lyrics
             result = await search_lyrics(self.player.current.title)
 
@@ -186,8 +196,7 @@ class NowPlayingView(ui.View):
                 await interaction.followup.send(
                     embed=EmbedBuilder.error(
                         f"Lirik tidak ditemukan untuk: **{self.player.current.title}**"
-                    ),
-                    ephemeral=True
+                    )
                 )
                 return
 
@@ -212,14 +221,14 @@ class NowPlayingView(ui.View):
                         embed.set_thumbnail(url=result['thumbnail'])
                 embed.set_footer(text="Omnia Music 🎶 • Lyrics powered by Genius")
 
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                msg = await interaction.followup.send(embed=embed, wait=True)
+                self.player.lyrics_messages.append(msg)
 
         except Exception as e:
             print(f"Lyrics button error: {e}")
             try:
                 await interaction.followup.send(
-                    embed=EmbedBuilder.error("Gagal memuat lirik."),
-                    ephemeral=True
+                    embed=EmbedBuilder.error("Gagal memuat lirik.")
                 )
             except:
                 pass

@@ -326,7 +326,10 @@ class Music(commands.Cog):
                     embed.set_thumbnail(url=result['thumbnail'])
             embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by Genius")
 
-            await interaction.followup.send(embed=embed)
+            msg = await interaction.followup.send(embed=embed, wait=True)
+            # Track for auto-delete when song changes
+            player = self.get_player(interaction.guild)
+            player.lyrics_messages.append(msg)
 
     # ─────────────────────── /loop ───────────────────────
 

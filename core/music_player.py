@@ -38,6 +38,7 @@ class MusicPlayer:
         self.autoplay: bool = False
         self.text_channel: discord.TextChannel | None = None
         self.now_playing_message: discord.Message | None = None
+        self.lyrics_messages: list[discord.Message] = []  # Track lyrics messages for cleanup
         self._view_factory = None  # Callback to create NowPlayingView
         self._idle_task: asyncio.Task | None = None
         self._playing = asyncio.Event()
@@ -225,13 +226,25 @@ class MusicPlayer:
                 self.loop_mode = old_loop
 
     async def _disable_now_playing_buttons(self):
-        """Delete the current Now Playing message."""
+        """Delete the current Now Playing message and lyrics messages."""
+        # Delete lyrics messages first
+        await self._delete_lyrics_messages()
+        
         if self.now_playing_message:
             try:
                 await self.now_playing_message.delete()
             except (discord.HTTPException, Exception):
                 pass
             self.now_playing_message = None
+
+    async def _delete_lyrics_messages(self):
+        """Delete all tracked lyrics messages."""
+        for msg in self.lyrics_messages:
+            try:
+                await msg.delete()
+            except (discord.HTTPException, Exception):
+                pass
+        self.lyrics_messages.clear()
 
     async def stop(self):
         """Stop playback and clear queue."""

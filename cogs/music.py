@@ -122,8 +122,12 @@ class Music(commands.Cog):
                 else:
                     continue # Skip invalid entry
             
-            # For non-playlist entries, source URL is already available
+            # For non-playlist entries, source URL is already available only if it's NOT a YouTube link
             source_url = entry.get('url', '') if not playlist_title else ''
+            if 'youtube.com/watch' in source_url or 'youtu.be/' in source_url:
+                # Use empty source_url for lazy loading
+                source_url = ''
+            
             track = Track(
                 source_url=source_url,
                 title=entry.get('title', 'Unknown'),

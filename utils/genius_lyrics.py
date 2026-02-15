@@ -34,6 +34,7 @@ def _get_genius():
     return _genius
 
 
+
 def _clean_title(title: str) -> str:
     """
     Clean a YouTube video title for better Genius search results.
@@ -62,6 +63,13 @@ def _clean_title(title: str) -> str:
         r'\bofficial\b',
         r'\blyrics?\b',
         r'\bvideo\b',
+        r'\(Original\s*Soundtrack\s*(from)?.*?\)',
+        r'\(OST.*?\)',
+        r'\(Duet\s*Version\)',
+        r'\(Acoustic\s*Version\)',
+        r'\(Remix\)',
+        r'\(Cover\)',
+        r'with\s+Lyrics',
     ]
     cleaned = title
     for pattern in patterns:
@@ -75,7 +83,23 @@ def _clean_title(title: str) -> str:
     return cleaned if cleaned else title
 
 
-def _search_lyrics_sync(query: str) -> dict | None:
+def _extract_metadata(query: str) -> dict:
+    """
+    Attempt to extract artist and title from a query string.
+    Returns dict with 'artist' and 'title' if successful, else content is just 'title'.
+    """
+    # Common separators: " - ", " : ", " | "
+    separators = [r'\s-\s', r'\s:\s', r'\s\|\s']
+
+    for sep in separators:
+        parts = re.split(sep, query, maxsplit=1)
+        if len(parts) == 2:
+            return {'artist': parts[0].strip(), 'title': parts[1].strip()}
+
+    return {'title': query.strip()}
+
+
+def _search_lyrics_sync(title: str, artist: str = "") -> dict | None:
     """
     Synchronous Genius search with retry logic.
     Returns dict with title, artist, lyrics, url, thumbnail.
@@ -86,7 +110,7 @@ def _search_lyrics_sync(query: str) -> dict | None:
     for attempt in range(max_retries):
         try:
             genius = _get_genius()
-            song = genius.search_song(query)
+            song = genius.search_song(title, artist)
             if song:
                 return {
                     'title': song.title,
@@ -108,20 +132,49 @@ def _search_lyrics_sync(query: str) -> dict | None:
 async def search_lyrics(query: str, *, loop: asyncio.AbstractEventLoop = None) -> dict | None:
     """
     Async wrapper for Genius lyrics search.
-    Returns dict with: title, artist, lyrics, url, thumbnail
-    Returns None if not found.
+    Strategies:
+    1. Structured Search (Artist - Title) if separator found.
+    2. Structured Search (Title - Artist) swap.
+    3. Cleaned Query Search.
+    4. Original Query Search.
     """
     loop = loop or asyncio.get_event_loop()
-    # Clean YouTube-style title
+
+    # 1. Clean the title
     cleaned = _clean_title(query)
     logger.info(f'Lyrics search: "{query}" → cleaned: "{cleaned}"')
 
-    result = await loop.run_in_executor(None, partial(_search_lyrics_sync, cleaned))
+    # 2. Extract metadata
+    metadata = _extract_metadata(cleaned)
 
-    # Fallback: try original query if cleaned version failed
-    if result is None and cleaned != query:
-        logger.info(f'Lyrics fallback: trying original query "{query}"')
-        result = await loop.run_in_executor(None, partial(_search_lyrics_sync, query))
+    # Helper to run sync search
+    async def run_search(t, a=""):
+        return await loop.run_in_executor(None, partial(_search_lyrics_sync, t, a))
+
+    result = None
+
+    # Strategy A: structured search if artist is found
+    if 'artist' in metadata:
+        artist, title = metadata['artist'], metadata['title']
+        logger.info(f'Lyrics strategy: Structured "{artist}" - "{title}"')
+        
+        # Try Artist - Title
+        result = await run_search(title, artist)
+        
+        # Try Title - Artist (swap) if failed
+        if not result:
+            logger.info(f'Lyrics strategy: Structured Swap "{title}" - "{artist}"')
+            result = await run_search(artist, title)
+
+    # Strategy B: Cleaned query (if structured failed or no artist found)
+    if not result:
+        logger.info(f'Lyrics strategy: Cleaned query "{cleaned}"')
+        result = await run_search(cleaned)
+
+    # Strategy C: Original query fallback
+    if not result and cleaned != query:
+        logger.info(f'Lyrics strategy: Original query "{query}"')
+        result = await run_search(query)
 
     return result
 

@@ -53,6 +53,24 @@ class NowPlayingView(ui.View):
             self.btn_autoplay.label = "Autoplay"
             self.btn_autoplay.style = discord.ButtonStyle.secondary
 
+        # Shuffle button
+        from core.music_player import ShuffleMode
+        if self.player.queue.size == 0:
+            self.btn_shuffle.disabled = True
+            self.btn_shuffle.style = discord.ButtonStyle.secondary
+            self.btn_shuffle.label = "Shuffle"
+        else:
+            self.btn_shuffle.disabled = False
+            if self.player.shuffle_mode == ShuffleMode.OFF:
+                self.btn_shuffle.style = discord.ButtonStyle.secondary
+                self.btn_shuffle.label = "Shuffle"
+            elif self.player.shuffle_mode == ShuffleMode.STANDARD:
+                self.btn_shuffle.style = discord.ButtonStyle.success
+                self.btn_shuffle.label = "Shuffle: Std"
+            elif self.player.shuffle_mode == ShuffleMode.ALTERNATIVE:
+                self.btn_shuffle.style = discord.ButtonStyle.primary
+                self.btn_shuffle.label = "Shuffle: Alt"
+
     async def _update_message(self, interaction: discord.Interaction):
         """Update the embed and buttons after a button press."""
         self._update_buttons()
@@ -120,6 +138,32 @@ class NowPlayingView(ui.View):
             await interaction.followup.send(embed=embed)
         except Exception:
             pass
+
+    # ─────────── Shuffle ───────────
+
+    @ui.button(emoji="🔀", label="Shuffle", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_shuffle(self, interaction: discord.Interaction, button: ui.Button):
+        """Cycle shuffle modes: Off -> Standard -> Alternative -> Off."""
+        from core.music_player import ShuffleMode
+        
+        # Check queue size again just in case
+        if self.player.queue.size == 0:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Queue kosong, tidak bisa shuffle!"),
+                ephemeral=True
+            )
+            return
+
+        new_mode = ShuffleMode.OFF
+        if self.player.shuffle_mode == ShuffleMode.OFF:
+            new_mode = ShuffleMode.STANDARD
+        elif self.player.shuffle_mode == ShuffleMode.STANDARD:
+            new_mode = ShuffleMode.ALTERNATIVE
+        elif self.player.shuffle_mode == ShuffleMode.ALTERNATIVE:
+            new_mode = ShuffleMode.OFF
+        
+        await self.player.set_shuffle(new_mode)
+        await self._update_message(interaction)
 
     # ─────────── Loop ───────────
 

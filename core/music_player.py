@@ -24,6 +24,12 @@ class LoopMode:
     QUEUE = 'queue'
 
 
+class ShuffleMode:
+    OFF = 0
+    STANDARD = 1
+    ALTERNATIVE = 2
+
+
 class MusicPlayer:
     """Music player instance for a single guild."""
 
@@ -35,6 +41,7 @@ class MusicPlayer:
         self.queue = QueueManager()
         self.current: Track | None = None
         self.loop_mode: str = LoopMode.OFF
+        self.shuffle_mode: int = ShuffleMode.OFF
         self.autoplay: bool = False
         self.text_channel: discord.TextChannel | None = None
         self.now_playing_message: discord.Message | None = None
@@ -251,6 +258,7 @@ class MusicPlayer:
         await self.queue.clear()
         self.current = None
         self.loop_mode = LoopMode.OFF
+        self.shuffle_mode = ShuffleMode.OFF
         self._play_history.clear()
         
         # Remove buttons
@@ -259,6 +267,11 @@ class MusicPlayer:
         vc = self.voice_client
         if vc and vc.is_playing():
             vc.stop()
+
+    async def set_shuffle(self, mode: int):
+        """Set shuffle mode and shuffle queue."""
+        self.shuffle_mode = mode
+        await self.queue.shuffle(mode)
 
     async def _get_autoplay_track(self) -> Track | None:
         """Get a recommended track for autoplay."""

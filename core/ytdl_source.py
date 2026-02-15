@@ -49,6 +49,7 @@ class Track:
         self.thumbnail = thumbnail
         self.uploader = uploader
         self.requester = requester
+        self.insert_id = 0  # For tracking original order
 
     @property
     def duration_str(self) -> str:

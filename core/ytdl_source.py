@@ -106,6 +106,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
             # Regular playlist: extract flat for speed
             opts['extract_flat'] = 'in_playlist'
             opts['playlistend'] = 50  # Limit to 50 songs max
+        elif is_search:
+             # Search: extract flat for speed, get details later
+            opts['extract_flat'] = True
 
         ydl = yt_dlp.YoutubeDL(opts)
         data = await loop.run_in_executor(
@@ -122,15 +125,31 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if 'entries' in data:
             # It's a playlist or search result
             if is_search:
-                # Search result: take first one, full info
-                entries = [data['entries'][0]] if data['entries'] else []
+                # Search result: take first one
+                if data['entries']:
+                    entry = data['entries'][0]
+                    # Fix up data from flat extraction
+                    if not entry.get('url'):
+                        entry['url'] = f"https://www.youtube.com/watch?v={entry['id']}"
+                    if not entry.get('thumbnail'):
+                        entry['thumbnail'] = f"https://i.ytimg.com/vi/{entry['id']}/hqdefault.jpg"
+                    entries = [entry]
+                else:
+                    entries = []
             else:
                 # Playlist URL
                 is_playlist = True
                 all_entries = list(data['entries'])
                 entries = all_entries[:50]  # Cap at 50 songs
+                # Fix up playlist entries if flat extracted
+                for entry in entries:
+                     if not entry.get('url') and entry.get('id'):
+                        entry['url'] = f"https://www.youtube.com/watch?v={entry['id']}"
+                     if not entry.get('thumbnail') and entry.get('id'):
+                        entry['thumbnail'] = f"https://i.ytimg.com/vi/{entry['id']}/hqdefault.jpg"
+
         else:
-            # Single video
+            # Single video (full extraction usually, unless forced flat)
             entries = [data]
 
         if not entries:

@@ -68,7 +68,7 @@ def _clean_title(title: str) -> str:
         r'\(Duet\s*Version\)',
         r'\(Acoustic\s*Version\)',
         r'\(Remix\)',
-        r'\(Cover\)',
+        r'\([^\)]*?Cover\)',
         r'with\s+Lyrics',
     ]
     cleaned = title

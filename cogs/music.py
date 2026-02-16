@@ -73,6 +73,9 @@ class Music(commands.Cog):
     @app_commands.describe(query="YouTube URL, Playlist URL, atau kata kunci pencarian")
     async def play(self, interaction: discord.Interaction, query: str):
         """Play a track or playlist from YouTube."""
+        start_time = asyncio.get_event_loop().time()
+        logger.info(f"cmd:play START query='{query}' user={interaction.user.id}")
+
         if not await self._ensure_voice(interaction):
             return
 
@@ -90,6 +93,9 @@ class Music(commands.Cog):
                 embed=EmbedBuilder.error(f"Gagal join voice channel: `{e}`")
             )
             return
+        
+        t_connect = asyncio.get_event_loop().time()
+        logger.info(f"cmd:play CONNECTED took {t_connect - start_time:.2f}s")
 
         # Extract track(s) info
         try:
@@ -99,6 +105,11 @@ class Music(commands.Cog):
                 embed=EmbedBuilder.error(f"Gagal mencari lagu: `{e}`")
             )
             return
+
+        t_extract = asyncio.get_event_loop().time()
+        logger.info(f"cmd:play EXTRACTED took {t_extract - t_connect:.2f}s. Entries: {len(entries)}")
+        if entries:
+             logger.info(f"First entry URL check: Is stream? {'googlevideo' in str(entries[0].get('url', ''))}")
 
         if not entries:
             await interaction.followup.send(
@@ -122,11 +133,14 @@ class Music(commands.Cog):
                 else:
                     continue # Skip invalid entry
             
-            # For non-playlist entries, source URL is already available only if it's NOT a YouTube link
+            # For non-playlist entries, source_url is the STREAM URL from full extraction
             source_url = entry.get('url', '') if not playlist_title else ''
+            
             if 'youtube.com/watch' in source_url or 'youtu.be/' in source_url:
-                # Use empty source_url for lazy loading
+                logger.info("cmd:play Detected Webpage URL in source_url, clearing for lazy load.")
                 source_url = ''
+            elif source_url:
+                 logger.info("cmd:play Preserving Stream URL for immediate playback.")
             
             track = Track(
                 source_url=source_url,
@@ -148,6 +162,9 @@ class Music(commands.Cog):
         # Add to queue
         for track in added_tracks:
             position = await player.add_track(track)
+
+        t_process = asyncio.get_event_loop().time()
+        logger.info(f"cmd:play PROCESSED took {t_process - t_extract:.2f}s")
 
         # Notify user
         if len(added_tracks) == 1:

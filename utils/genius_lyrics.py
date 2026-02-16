@@ -38,8 +38,8 @@ def _get_genius():
 NOISE_KEYWORDS = [
     "official music video", "music video", "official video", "lyric video", 
     "official audio", "audio video", "video clip",
-    "official", "video", "audio", "lyrics", "lyric",
-    "hd", "4k", "mv", "visualizer",
+    "official", "video", "audio", "lyrics", "lyric", "lirik",
+    "hd", "4k", "mv", "hq", "visualizer",
     "remastered", "live", "version", "edit",
     "explicit", "clean"
 ]
@@ -64,6 +64,7 @@ def _clean_title(title: str) -> str:
 
     # 3️⃣ Normalize separators
     cleaned = cleaned.replace('|', '-')
+    cleaned = cleaned.replace('//', '-')
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
     # 5️⃣ Remove "feat", "ft", "featuring"

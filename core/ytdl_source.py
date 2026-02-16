@@ -107,8 +107,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
             opts['extract_flat'] = 'in_playlist'
             opts['playlistend'] = 50  # Limit to 50 songs max
         elif is_search:
-             # Search: extract flat for speed, get details later
-            opts['extract_flat'] = True
+             # Search: full extraction immediately for faster playback start
+            opts['extract_flat'] = False
 
         ydl = yt_dlp.YoutubeDL(opts)
         
@@ -150,13 +150,27 @@ class YTDLSource(discord.PCMVolumeTransformer):
             # It's a playlist or search result
             if is_search:
                 # Search result: take first one
-                if data['entries']:
+                if data.get('entries'):
                     entry = data['entries'][0]
-                    # Fix up data from flat extraction
+                elif is_search and 'entries' not in data:
+                    # Sometimes ytsearch1 returns the dict directly if not flat
+                    entry = data
+                else:
+                    entry = None
+
+                if entry:
+                    # Fix up data
                     if not entry.get('url'):
                         entry['url'] = f"https://www.youtube.com/watch?v={entry['id']}"
-                    if not entry.get('thumbnail'):
-                        entry['thumbnail'] = f"https://i.ytimg.com/vi/{entry['id']}/hqdefault.jpg"
+                    
+                    # If we did full extraction, 'url' might be the googlevideo link.
+                    # We want the webpage_url for the Track object, but we can store the stream url if needed.
+                    # Standardize: entry['url'] should be webpage_url for Track compatibility
+                    webpage_url = entry.get('webpage_url')
+                    if not webpage_url and entry.get('id'):
+                        webpage_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                    
+                    entry['webpage_url'] = webpage_url
                     entries = [entry]
                 else:
                     entries = []
@@ -183,9 +197,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
 
     @classmethod
-    async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+    async def get_stream_data(cls, query: str, *, loop: asyncio.AbstractEventLoop = None) -> dict:
         """
-        Create audio source from a SPECIFIC URL (used by player).
+        Extract stream data (audio URL) for a specific video.
+        Used for pre-fetching or playback.
         """
         loop = loop or asyncio.get_event_loop()
 
@@ -218,6 +233,15 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
         if 'entries' in data:
             data = data['entries'][0]
+            
+        return data
+
+    @classmethod
+    async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+        """
+        Create audio source from a SPECIFIC URL (used by player).
+        """
+        data = await cls.get_stream_data(query, loop=loop)
 
         source_url = data.get('url')
         if not source_url:

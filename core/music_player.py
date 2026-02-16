@@ -48,6 +48,7 @@ class MusicPlayer:
         self.lyrics_messages: list[discord.Message] = []  # Track lyrics messages for cleanup
         self._view_factory = None  # Callback to create NowPlayingView
         self._idle_task: asyncio.Task | None = None
+        self._preload_task: asyncio.Task | None = None
         self._playing = asyncio.Event()
         self._play_history: list[str] = []  # Track URLs that have been played
 
@@ -138,6 +139,7 @@ class MusicPlayer:
             if next_track is None:
                 # Nothing to play — notify and start idle timer
                 self.current = None
+                self._cancel_preload() # Cancel any pending preload
                 self._start_idle_timer()
 
                 # Disable buttons on old Now Playing message
@@ -191,6 +193,9 @@ class MusicPlayer:
                 await asyncio.sleep(0.5)
 
             vc.play(source, after=after_play)
+
+            # Trigger pre-loading for the NEXT track
+            self._schedule_preload()
 
         except Exception as e:
             logger.error(f'Error playing track: {e}')
@@ -361,3 +366,48 @@ class MusicPlayer:
                 await self.disconnect()
         except asyncio.CancelledError:
             pass
+
+    # ─────────────────────── Preload Logic ───────────────────────
+
+    def _schedule_preload(self):
+        """Schedule pre-loading of the next track."""
+        self._cancel_preload()
+        self._preload_task = asyncio.create_task(self._preload_next_track())
+
+    def _cancel_preload(self):
+        """Cancel existing preload task."""
+        if self._preload_task and not self._preload_task.done():
+            self._preload_task.cancel()
+            self._preload_task = None
+
+    async def _preload_next_track(self):
+        """
+        Pre-resolve the URL for the next track in the queue.
+        This ensures 'skip' and auto-play are instant.
+        """
+        try:
+            # Wait a bit to let the current playback stabilize
+            await asyncio.sleep(2)
+            
+            # Peek at next track
+            next_track = self.queue.peek_next()
+            if not next_track:
+                # If autoplay is on, maybe we should pre-fetch autoplay?
+                # For now, simplistic approach: only if queue has item.
+                return
+
+            if next_track.source_url:
+                # Already resolved
+                return
+
+            logger.info(f"Pre-loading next track: {next_track.title}")
+            data = await YTDLSource.get_stream_data(next_track.url, loop=self.bot.loop)
+            
+            if data and data.get('url'):
+                next_track.source_url = data['url']
+                logger.info(f"Pre-loaded successfully: {next_track.title}")
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning(f"Pre-load failed: {e}")

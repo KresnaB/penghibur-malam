@@ -49,6 +49,7 @@ class MusicPlayer:
         self._view_factory = None  # Callback to create NowPlayingView
         self._idle_task: asyncio.Task | None = None
         self._preload_task: asyncio.Task | None = None
+        self._next_autoplay: Track | None = None
         self._playing = asyncio.Event()
         self._play_history: list[str] = []  # Track URLs that have been played
 
@@ -132,14 +133,20 @@ class MusicPlayer:
         if next_track is None:
             # Queue empty — try autoplay
             if self.autoplay and self.current:
-                autoplay_track = await self._get_autoplay_track()
-                if autoplay_track:
-                    next_track = autoplay_track
+                # Check pre-fetched autoplay first
+                if self._next_autoplay:
+                    next_track = self._next_autoplay
+                    self._next_autoplay = None  # Consume it
+                else:
+                    autoplay_track = await self._get_autoplay_track()
+                    if autoplay_track:
+                        next_track = autoplay_track
 
             if next_track is None:
                 # Nothing to play — notify and start idle timer
                 self.current = None
                 self._cancel_preload() # Cancel any pending preload
+                self._next_autoplay = None
                 self._start_idle_timer()
 
                 # Disable buttons on old Now Playing message
@@ -268,7 +275,11 @@ class MusicPlayer:
         self.current = None
         self.loop_mode = LoopMode.OFF
         self.shuffle_mode = ShuffleMode.OFF
+        self.current = None
+        self.loop_mode = LoopMode.OFF
+        self.shuffle_mode = ShuffleMode.OFF
         self._play_history.clear()
+        self._next_autoplay = None
         
         # Remove buttons
         await self._disable_now_playing_buttons()
@@ -392,9 +403,22 @@ class MusicPlayer:
             # Peek at next track
             next_track = self.queue.peek_next()
             if not next_track:
-                # If autoplay is on, maybe we should pre-fetch autoplay?
-                # For now, simplistic approach: only if queue has item.
+                # Queue is empty. If autoplay is ON, pre-fetch the recommendation!
+                if self.autoplay and self.current and not self._next_autoplay:
+                     try:
+                        logger.info(f"Pre-loading autoplay for: {self.current.title}")
+                        # _get_autoplay_track returns a full Track object with source_url already resolved
+                        track = await self._get_autoplay_track()
+                        if track:
+                            self._next_autoplay = track
+                            logger.info(f"Pre-loaded autoplay track: {track.title}")
+                     except Exception as e:
+                        logger.warning(f"Autoplay pre-load failed: {e}")
                 return
+
+            # Clear stale autoplay if queue is not empty (user added song)
+            if self._next_autoplay:
+                self._next_autoplay = None
 
             if next_track.source_url:
                 # Already resolved

@@ -223,6 +223,56 @@ class Music(commands.Cog):
             embed=EmbedBuilder.success("⏹️ Stopped", "Pemutaran dihentikan dan queue dikosongkan.")
         )
 
+    # ─────────────────────── /reconnect ───────────────────────
+
+    @app_commands.command(name="reconnect", description="Reset bot dan connect ulang ke voice")
+    async def reconnect(self, interaction: discord.Interaction):
+        """Force disconnect, reset state, and reconnect to voice."""
+        if not await self._ensure_voice(interaction):
+            return
+
+        # Defer interaction as this involves disconnect/connect
+        await interaction.response.defer()
+
+        guild = interaction.guild
+        voice_channel = interaction.user.voice.channel
+
+        # 1. Force Disconnect & Cleanup
+        try:
+            player = self.get_player(guild)
+            await player.stop()     # Clear queue and state
+            await player.disconnect()
+            
+            # Explicitly cleanup
+            self.cleanup_player(guild.id)
+            
+            # Additional cleanup for safety
+            if guild.voice_client:
+                await guild.voice_client.disconnect(force=True)
+                
+        except Exception as e:
+            logger.warning(f"Error during disconnect phase: {e}")
+
+        await asyncio.sleep(1) # Brief pause
+
+        # 2. Re-Initialize and Connect
+        try:
+            player = self.get_player(guild)
+            player.text_channel = interaction.channel
+            await player.connect(voice_channel)
+            
+            await interaction.followup.send(
+                embed=EmbedBuilder.success(
+                    "🔄 Reconnected", 
+                    f"Bot berhasil di-reset dan terhubung kembali ke **{voice_channel.name}**."
+                )
+            )
+        except Exception as e:
+            logger.error(f"Failed to reconnect: {e}")
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(f"Gagal reconnect: `{e}`")
+            )
+
     # ─────────────────────── /queue ───────────────────────
 
     @app_commands.command(name="queue", description="Tampilkan antrian lagu")

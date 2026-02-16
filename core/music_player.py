@@ -200,6 +200,10 @@ class MusicPlayer:
                     await self.text_channel.send(embed=embed)
                 except discord.HTTPException:
                     pass
+            
+            # Prevent rapid queue draining on network failure
+            await asyncio.sleep(5)
+            
             # Try next track
             await self.play_next()
             return

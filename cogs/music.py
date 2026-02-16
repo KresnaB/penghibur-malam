@@ -482,7 +482,22 @@ class Music(commands.Cog):
     async def on_voice_state_update(
         self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
     ):
-        """Auto disconnect when bot is alone in voice channel."""
+        """Handle voice state updates for auto-disconnect and reconnection."""
+        # 1. Handle Bot Reconnection
+        if member.id == self.bot.user.id:
+            if before.channel is None and after.channel is not None:
+                # Bot joined/reconnected
+                player = self.get_player(member.guild)
+                # If queue has items but not playing, resume
+                if player.queue.size > 0 and not player.is_playing and not player.is_paused:
+                     logger.info("Bot reconnected. Resuming queue...")
+                     try:
+                        await player.play_next()
+                     except Exception as e:
+                        logger.error(f"Failed to resume on reconnect: {e}")
+            return
+
+        # 2. Auto Disconnect Logic (ignore bots)
         if member.bot:
             return
 

@@ -111,10 +111,34 @@ class YTDLSource(discord.PCMVolumeTransformer):
             opts['extract_flat'] = True
 
         ydl = yt_dlp.YoutubeDL(opts)
-        data = await loop.run_in_executor(
-            None, lambda: ydl.extract_info(query, download=False)
-        )
+        
+        # Retry logic for network errors
+        data = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                data = await loop.run_in_executor(
+                    None, lambda: ydl.extract_info(query, download=False)
+                )
+                break
+            except Exception as e:
+                last_error = e
+                # Check for common network errors
+                error_str = str(e).lower()
+                network_errors = [
+                    'dns', 'socket', 'connection', 'temporary failure', 
+                    'timeout', 'reset', 'refused', 'handshake', 'remote end closed'
+                ]
+                if any(err in error_str for err in network_errors):
+                    wait = 2 ** attempt
+                    print(f"YTDL network error, retrying in {wait}s... ({e})")
+                    await asyncio.sleep(wait)
+                    continue
+                raise e
 
+        if not data and last_error:
+            raise last_error
+        
         if not data:
             raise ValueError("Tidak ditemukan data.")
 
@@ -165,9 +189,32 @@ class YTDLSource(discord.PCMVolumeTransformer):
         """
         loop = loop or asyncio.get_event_loop()
 
-        data = await loop.run_in_executor(
-            None, lambda: ytdl.extract_info(query, download=False)
-        )
+        # Retry logic for extraction
+        data = None
+        last_error = None
+        for attempt in range(3):
+            try:
+                data = await loop.run_in_executor(
+                    None, lambda: ytdl.extract_info(query, download=False)
+                )
+                break
+            except Exception as e:
+                last_error = e
+                # Check for common network errors
+                error_str = str(e).lower()
+                network_errors = [
+                    'dns', 'socket', 'connection', 'temporary failure', 
+                    'timeout', 'reset', 'refused', 'handshake', 'remote end closed'
+                ]
+                if any(err in error_str for err in network_errors):
+                    wait = 2 ** attempt
+                    print(f"YTDL extraction error (playback), retrying in {wait}s... ({e})")
+                    await asyncio.sleep(wait)
+                    continue
+                raise e
+        
+        if not data and last_error:
+            raise last_error
 
         if 'entries' in data:
             data = data['entries'][0]

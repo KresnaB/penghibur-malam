@@ -105,6 +105,7 @@ def _search_lyrics_sync(title: str, artist: str = "") -> dict | None:
             genius = _get_genius()
             song = genius.search_song(title, artist)
             if song:
+                return {
                     'title': song.title,
                     'artist': song.artist,
                     'lyrics': song.lyrics,

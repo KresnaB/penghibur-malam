@@ -35,52 +35,44 @@ def _get_genius():
 
 
 
+NOISE_KEYWORDS = [
+    "official", "video", "audio", "lyrics", "lyric",
+    "hd", "4k", "mv", "music video", "visualizer",
+    "remastered", "live", "version", "edit",
+    "explicit", "clean"
+]
+
+
 def _clean_title(title: str) -> str:
     """
-    Clean a YouTube video title for better Genius search results.
-    Removes common tags like (Official Video), [Lyrics], feat., etc.
+    Clean YouTube title aggressively for Genius API search.
+    Goal: return pure song title only.
     """
-    # Remove common YouTube tags
-    patterns = [
-        r'\(Official\s*(Music\s*)?Video\)',
-        r'\(Official\s*Audio\)',
-        r'\(Lyric\s*Video\)',
-        r'\(Lyrics?\)',
-        r'\(Visualizer\)',
-        r'\(Audio\)',
-        r'\(Live\)',
-        r'\[Official\s*(Music\s*)?Video\]',
-        r'\[Official\s*Audio\]',
-        r'\[Lyric\s*Video\]',
-        r'\[Lyrics?\]',
-        r'\[Visualizer\]',
-        r'\[Audio\]',
-        r'\[Live\]',
-        r'\bMV\b',
-        r'\bM/V\b',
-        r'\bHD\b',
-        r'\b4K\b',
-        r'\bofficial\b',
-        r'\blyrics?\b',
-        r'\bvideo\b',
-        r'\(Original\s*Soundtrack\s*(from)?.*?\)',
-        r'\(OST.*?\)',
-        r'\(Duet\s*Version\)',
-        r'\(Acoustic\s*Version\)',
-        r'\(Remix\)',
-        r'\([^\)]*?Cover\)',
-        r'with\s+Lyrics',
-    ]
-    cleaned = title
-    for pattern in patterns:
-        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
 
-    # Remove extra whitespace and trailing dashes/pipes
+    original = title
+    cleaned = title.lower()
+
+    # 1️⃣ Remove content inside () and []
+    cleaned = re.sub(r'\([^)]*\)', '', cleaned)
+    cleaned = re.sub(r'\[[^\]]*\]', '', cleaned)
+
+    # 2️⃣ Remove common noise keywords
+    for word in NOISE_KEYWORDS:
+        cleaned = re.sub(rf'\b{re.escape(word)}\b', '', cleaned)
+
+    # 3️⃣ Normalize separators
+    cleaned = cleaned.replace('|', '-')
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    # 5️⃣ Remove "feat", "ft", "featuring"
+    cleaned = re.sub(r'\b(feat|ft|featuring)\b.*', '', cleaned)
+
+    # 6️⃣ Final whitespace and separator cleanup
     cleaned = re.sub(r'\s*[-|]\s*$', '', cleaned)
     cleaned = re.sub(r'^\s*[-|]\s*', '', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
-    return cleaned if cleaned else title
+    return cleaned if cleaned else original
 
 
 def _extract_metadata(query: str) -> dict:
@@ -89,7 +81,8 @@ def _extract_metadata(query: str) -> dict:
     Returns dict with 'artist' and 'title' if successful, else content is just 'title'.
     """
     # Common separators: " - ", " : ", " | "
-    separators = [r'\s-\s', r'\s:\s', r'\s\|\s']
+    # Improved regex to handle optional spaces for colon/pipe, but distinct spaces for dash
+    separators = [r'\s-\s', r'\s*:\s*', r'\s*\|\s*']
 
     for sep in separators:
         parts = re.split(sep, query, maxsplit=1)
@@ -112,12 +105,10 @@ def _search_lyrics_sync(title: str, artist: str = "") -> dict | None:
             genius = _get_genius()
             song = genius.search_song(title, artist)
             if song:
-                return {
                     'title': song.title,
                     'artist': song.artist,
                     'lyrics': song.lyrics,
                     'url': song.url,
-                    'thumbnail': song.song_art_image_thumbnail_url if hasattr(song, 'song_art_image_thumbnail_url') else '',
                 }
             return None  # Song not found, no need to retry
         except Exception as e:
@@ -153,8 +144,13 @@ async def search_lyrics(query: str, *, loop: asyncio.AbstractEventLoop = None) -
 
     result = None
 
-    # Strategy A: structured search if artist is found
-    if 'artist' in metadata:
+    # Strategy 1: Cleaned query (Primary)
+    # This is usually fastest and most robust as it relies on Genius's search relevance
+    logger.info(f'Lyrics strategy: Cleaned query "{cleaned}"')
+    result = await run_search(cleaned)
+
+    # Strategy 2: Structured search (Fallback)
+    if not result and 'artist' in metadata:
         artist, title = metadata['artist'], metadata['title']
         logger.info(f'Lyrics strategy: Structured "{artist}" - "{title}"')
         
@@ -166,12 +162,7 @@ async def search_lyrics(query: str, *, loop: asyncio.AbstractEventLoop = None) -
             logger.info(f'Lyrics strategy: Structured Swap "{title}" - "{artist}"')
             result = await run_search(artist, title)
 
-    # Strategy B: Cleaned query (if structured failed or no artist found)
-    if not result:
-        logger.info(f'Lyrics strategy: Cleaned query "{cleaned}"')
-        result = await run_search(cleaned)
-
-    # Strategy C: Original query fallback
+    # Strategy 3: Original query (Last resort)
     if not result and cleaned != query:
         logger.info(f'Lyrics strategy: Original query "{query}"')
         result = await run_search(query)

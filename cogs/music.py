@@ -376,8 +376,6 @@ class Music(commands.Cog):
                     value=f"[Lihat di Genius]({result['url']})",
                     inline=True
                 )
-                if result.get('thumbnail'):
-                    embed.set_thumbnail(url=result['thumbnail'])
             embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by Genius")
 
             msg = await interaction.followup.send(embed=embed, wait=True)

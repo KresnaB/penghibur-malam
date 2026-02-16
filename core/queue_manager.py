@@ -32,6 +32,13 @@ class QueueManager:
                 return self._queue.pop(0)
             return None
 
+    async def peek_next(self) -> Optional[Track]:
+        """Peek at the next track without removing it."""
+        async with self._lock:
+            if self._queue:
+                return self._queue[0]
+            return None
+
     async def clear(self):
         """Clear all tracks from the queue."""
         async with self._lock:

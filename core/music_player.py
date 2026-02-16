@@ -412,7 +412,7 @@ class MusicPlayer:
             await asyncio.sleep(1)
             
             # Peek at next track
-            next_track = self.queue.peek_next()
+            next_track = await self.queue.peek_next()
             if not next_track:
                 # Queue is empty. If autoplay is ON, pre-fetch the recommendation!
                 if self.autoplay and self.current and not self._next_autoplay:

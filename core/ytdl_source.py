@@ -23,6 +23,7 @@ YTDL_FORMAT_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
+    'cachedir': False,
     # Anti-blocking: Use cookies.txt if available
     'cookiefile': 'cookies.txt',
     # Spoof User-Agent
@@ -33,7 +34,7 @@ YTDL_FORMAT_OPTIONS = {
 }
 
 FFMPEG_OPTIONS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0 -probesize 32',
     'options': '-vn',
 }
 

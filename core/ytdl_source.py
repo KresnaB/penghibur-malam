@@ -5,8 +5,11 @@ Handles YouTube URL extraction and keyword search.
 
 import asyncio
 import re
+import logging
 import discord
 import yt_dlp
+
+logger = logging.getLogger('antigrafity.ytdl')
 
 # yt-dlp configuration
 YTDL_FORMAT_OPTIONS = {
@@ -131,7 +134,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 ]
                 if any(err in error_str for err in network_errors):
                     wait = 2 ** attempt
-                    print(f"YTDL network error, retrying in {wait}s... ({e})")
+                    logger.warning(f"YTDL network error, retrying in {wait}s... ({e})")
                     await asyncio.sleep(wait)
                     continue
                 raise e
@@ -223,7 +226,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 ]
                 if any(err in error_str for err in network_errors):
                     wait = 2 ** attempt
-                    print(f"YTDL extraction error (playback), retrying in {wait}s... ({e})")
+                    logger.warning(f"YTDL extraction error (playback), retrying in {wait}s... ({e})")
                     await asyncio.sleep(wait)
                     continue
                 raise e
@@ -262,8 +265,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         """
         loop = loop or asyncio.get_event_loop()
         import re
-        import logging
-        logger = logging.getLogger('antigrafity.ytdl')
+        # logger already initialized at module level
 
         related = []
 

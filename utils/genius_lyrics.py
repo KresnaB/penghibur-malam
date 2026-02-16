@@ -36,8 +36,10 @@ def _get_genius():
 
 
 NOISE_KEYWORDS = [
+    "official music video", "music video", "official video", "lyric video", 
+    "official audio", "audio video", "video clip",
     "official", "video", "audio", "lyrics", "lyric",
-    "hd", "4k", "mv", "music video", "visualizer",
+    "hd", "4k", "mv", "visualizer",
     "remastered", "live", "version", "edit",
     "explicit", "clean"
 ]

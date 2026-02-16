@@ -172,9 +172,19 @@ class MusicPlayer:
             if len(self._play_history) > 50:
                 self._play_history = self._play_history[-50:]
 
+        # Wait for any pending pre-load to finish
+        if self._preload_task and not self._preload_task.done():
+            try:
+                # Wait up to 10s for pre-load (it should be faster)
+                logger.info("Waiting for pre-load to complete...")
+                await asyncio.wait_for(self._preload_task, timeout=10.0)
+            except Exception as e:
+                logger.warning(f"Waited for pre-load but it failed/timed out: {e}")
+
         try:
             # Create audio source — reuse source_url if already extracted
             if next_track.source_url:
+                logger.info(f"Using pre-loaded URL for: {next_track.title}")
                 source = discord.FFmpegPCMAudio(
                     next_track.source_url,
                     before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -398,7 +408,8 @@ class MusicPlayer:
         """
         try:
             # Wait a bit to let the current playback stabilize
-            await asyncio.sleep(2)
+            # Reduced to 1s to ensure it's ready before the song ends (short songs)
+            await asyncio.sleep(1)
             
             # Peek at next track
             next_track = self.queue.peek_next()

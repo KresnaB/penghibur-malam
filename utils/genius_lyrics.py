@@ -41,6 +41,7 @@ NOISE_KEYWORDS = [
     "official", "video", "audio", "lyrics", "lyric", "lirik",
     "hd", "4k", "mv", "hq", "visualizer",
     "remastered", "live", "version", "edit",
+    "unguofficial", "officialchannel", "officialaccount",
     "explicit", "clean"
 ]
 
@@ -57,18 +58,28 @@ def _clean_title(title: str) -> str:
     # 1️⃣ Remove content inside () and []
     cleaned = re.sub(r'\([^)]*\)', '', cleaned)
     cleaned = re.sub(r'\[[^\]]*\]', '', cleaned)
+    
+    # 1.5️⃣ Aggressive separator cutoff: Drop everything after '|'
+    if '|' in cleaned:
+        cleaned = cleaned.split('|')[0]
+
+    # Normalize '&' to 'and'
+    cleaned = re.sub(r'\s+&\s+', ' and ', cleaned)
 
     # 2️⃣ Remove common noise keywords
     for word in NOISE_KEYWORDS:
         cleaned = re.sub(rf'\b{re.escape(word)}\b', '', cleaned)
 
     # 3️⃣ Normalize separators
-    cleaned = cleaned.replace('|', '-')
+    # '|' is handled above
     cleaned = cleaned.replace('//', '-')
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
     # 5️⃣ Remove "feat", "ft", "featuring"
     cleaned = re.sub(r'\b(feat|ft|featuring)\b.*', '', cleaned)
+
+    # Remove version numbers like "2.0", "v1", etc ONLY if at end
+    cleaned = re.sub(r'\b(v?\d+(\.\d+)?)\s*$', '', cleaned)
 
     # 6️⃣ Final whitespace and separator cleanup
     cleaned = re.sub(r'\s*[-|]\s*$', '', cleaned)

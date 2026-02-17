@@ -130,6 +130,10 @@ class MusicPlayer:
         # Get next track
         next_track = await self.queue.get_next()
 
+        if next_track:
+            # If we are playing from queue, any previous autoplay recommendation is stale
+            self._next_autoplay = None
+
         if next_track is None:
             # Queue empty — try autoplay
             if self.autoplay and self.current:

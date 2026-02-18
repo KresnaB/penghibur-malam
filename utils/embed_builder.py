@@ -60,7 +60,7 @@ class EmbedBuilder:
 
     @staticmethod
     def queue_list(tracks: list, current: Track | None, total_size: int) -> discord.Embed:
-        """Create a Queue list embed."""
+        """Create a Queue list embed. Supports paging via multiple fields."""
         embed = discord.Embed(
             title="📜 Music Queue",
             color=EmbedBuilder.COLOR_QUEUE
@@ -73,45 +73,57 @@ class EmbedBuilder:
                 inline=False
             )
 
-        if tracks:
-            queue_text = ""
-            for i, track in enumerate(tracks, 1):
-                # Truncate title to avoid 1024 char limit
-                title = track.title
-                if len(title) > 40:
-                    title = title[:37] + "..."
-                
-                line = f"`{i}.` **[{title}]({track.url})** [{track.duration_str}]\n"
-                
-                # Check if adding this line exceeds limit
-                if len(queue_text) + len(line) > 1000:
-                    remaining = len(tracks) - (i - 1) + (total_size - len(tracks))
-                    queue_text += f"\n*... dan {remaining} lagu lainnya*"
-                    break
-                
-                queue_text += line
-
-            # Handle case where we didn't break early but total_size > len(tracks)
-            # (e.g. tracks=20 but total=50)
-            if total_size > len(tracks) and len(queue_text) < 1000:
-                 remaining = total_size - len(tracks)
-                 footer = f"\n*... dan {remaining} lagu lainnya*"
-                 if len(queue_text) + len(footer) <= 1024:
-                     queue_text += footer
-                 else:
-                     queue_text += "\n*...*"
-
-            embed.add_field(
-                name=f"📋 Antrian ({total_size} lagu)",
-                value=queue_text,
-                inline=False
-            )
-        else:
+        if not tracks:
             embed.add_field(
                 name="📋 Antrian",
                 value="*Queue kosong*",
                 inline=False
             )
+            embed.set_footer(text="Omnia Music 🎶")
+            return embed
+
+        # Process tracks
+        current_field_text = ""
+        current_field_index = 0
+        field_limit = 1024
+        
+        for i, track in enumerate(tracks, 1):
+            # Truncate title
+            title = track.title
+            if len(title) > 40:
+                title = title[:37] + "..."
+            
+            line = f"`{i}.` **[{title}]({track.url})** [{track.duration_str}]\n"
+            
+            # Check length for current field (leave buffer for footer if this is the last chunk)
+            if len(current_field_text) + len(line) > 1000:
+                # Field full, add it and start new one
+                field_name = f"📋 Antrian ({total_size} lagu)" if current_field_index == 0 else "📋 Antrian (Lanjutan)"
+                embed.add_field(name=field_name, value=current_field_text, inline=False)
+                current_field_text = ""
+                current_field_index += 1
+            
+            current_field_text += line
+
+        # Add remaining text
+        if current_field_text:
+            # Check if we need to add "and X others"
+            if total_size > len(tracks):
+                remaining = total_size - len(tracks)
+                footer = f"\n*... dan {remaining} lagu lainnya*"
+                
+                # If fits in current field
+                if len(current_field_text) + len(footer) <= 1024:
+                    current_field_text += footer
+                else:
+                    # If doesn't fit, add current field then new field for footer (rare but possible)
+                    field_name = f"📋 Antrian ({total_size} lagu)" if current_field_index == 0 else "📋 Antrian (Lanjutan)"
+                    embed.add_field(name=field_name, value=current_field_text, inline=False)
+                    current_field_text = footer
+                    current_field_index += 1
+
+            field_name = f"📋 Antrian ({total_size} lagu)" if current_field_index == 0 else "📋 Antrian (Lanjutan)"
+            embed.add_field(name=field_name, value=current_field_text, inline=False)
 
         embed.set_footer(text="Omnia Music 🎶")
         return embed

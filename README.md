@@ -10,10 +10,11 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 | `/skip` | Skip lagu saat ini |
 | `/stop` | Stop dan disconnect |
 | `/queue` | Lihat antrian lagu |
+| `/move <from> <to>` | Pindahkan lagu di queue |
 | `/nowplaying` | Info lagu yang diputar |
 | `/loop <off\|single\|queue>` | Atur mode loop |
 | `/autoplay` | Toggle autoplay rekomendasi |
-| `/lyrics [query]` | Cari lirik lagu dari Genius |
+| `/lyrics [query]` | Cari lirik lagu (Lrclib/Genius) |
 | `/status` | Tampilkan status bot |
 | `/help` | Tampilkan daftar command |
 
@@ -23,7 +24,7 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 - **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
 - **Playlist limit** maksimal 50 lagu per request
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
-- **Lyrics** cari lirik lagu via Genius API (tombol 🎤 di Now Playing + `/lyrics`)
+- **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)
 
 ## 📦 Instalasi
 

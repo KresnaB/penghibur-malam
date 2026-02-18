@@ -46,12 +46,18 @@ class NowPlayingView(ui.View):
         self.btn_loop.style = style
 
         # Autoplay button
-        if self.player.autoplay:
-            self.btn_autoplay.label = "Autoplay: ON"
-            self.btn_autoplay.style = discord.ButtonStyle.success
-        else:
+        if not self.player.autoplay:
             self.btn_autoplay.label = "Autoplay"
             self.btn_autoplay.style = discord.ButtonStyle.secondary
+            self.btn_autoplay.emoji = "🔄"
+        elif self.player.autoplay_mode == 'youtube':
+            self.btn_autoplay.label = "Autoplay: YT"
+            self.btn_autoplay.style = discord.ButtonStyle.success
+            self.btn_autoplay.emoji = "▶️"
+        else:
+            self.btn_autoplay.label = "Autoplay: Spot"
+            self.btn_autoplay.style = discord.ButtonStyle.primary
+            self.btn_autoplay.emoji = "🎧"
 
         # Shuffle button
         from core.music_player import ShuffleMode
@@ -183,8 +189,19 @@ class NowPlayingView(ui.View):
 
     @ui.button(emoji="🔄", label="Autoplay", style=discord.ButtonStyle.secondary, row=1)
     async def btn_autoplay(self, interaction: discord.Interaction, button: ui.Button):
-        """Toggle autoplay."""
-        self.player.autoplay = not self.player.autoplay
+        """Cycle autoplay: Off -> YouTube -> Spotify -> Off."""
+        if not self.player.autoplay:
+             # OFF -> YouTube
+             self.player.autoplay = True
+             self.player.autoplay_mode = 'youtube'
+        elif self.player.autoplay_mode == 'youtube':
+             # YouTube -> Spotify
+             self.player.autoplay_mode = 'spotify'
+        else:
+             # Spotify -> OFF
+             self.player.autoplay = False
+             self.player.autoplay_mode = 'youtube' # Reset to default
+        
         await self._update_message(interaction)
 
     # ─────────── Queue ───────────

@@ -306,7 +306,7 @@ class Music(commands.Cog):
         if player.loop_mode != LoopMode.OFF:
             status_parts.append(f"🔁 Loop: **{player.loop_mode}**")
         if player.autoplay:
-            status_parts.append("🔄 Autoplay: **ON**")
+            status_parts.append(f"🔄 Autoplay: **ON ({player.autoplay_mode.title()})**")
         if status_parts:
             embed.add_field(name="⚙️ Status", value=" • ".join(status_parts), inline=False)
 
@@ -333,7 +333,7 @@ class Music(commands.Cog):
         if player.loop_mode != LoopMode.OFF:
             info_parts.append(f"🔁 Loop: {player.loop_mode}")
         if player.autoplay:
-            info_parts.append("🔄 Autoplay: ON")
+            info_parts.append(f"🔄 Autoplay: ON ({player.autoplay_mode})")
         info_parts.append(f"📋 Queue: {player.queue.size} lagu")
 
         embed.add_field(name="⚙️ Info", value=" • ".join(info_parts), inline=False)
@@ -432,20 +432,33 @@ class Music(commands.Cog):
     # ─────────────────────── /autoplay ───────────────────────
 
     @app_commands.command(name="autoplay", description="Toggle autoplay (rekomendasi otomatis)")
-    async def autoplay(self, interaction: discord.Interaction):
-        """Toggle autoplay on/off."""
+    @app_commands.describe(mode="Sumber rekomendasi: youtube (default) atau spotify")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="YouTube Mix", value="youtube"),
+        app_commands.Choice(name="Spotify", value="spotify"),
+    ])
+    async def autoplay(self, interaction: discord.Interaction, mode: str = None):
+        """Toggle autoplay on/off or change mode."""
         if not await self._ensure_voice(interaction):
             return
         if not await self._ensure_same_channel(interaction):
             return
 
         player = self.get_player(interaction.guild)
-        player.autoplay = not player.autoplay
-
-        status = "ON 🟢" if player.autoplay else "OFF 🔴"
-        desc = ("Bot akan otomatis memutar lagu terkait saat queue kosong."
-                if player.autoplay
-                else "Autoplay dimatikan.")
+        
+        # If mode provided, just set mode (and ensure ON)
+        if mode:
+            player.autoplay = True
+            player.autoplay_mode = mode
+            status = "ON 🟢"
+            desc = f"Autoplay diaktifkan dengan mode: **{mode.title()}**"
+        else:
+            # Toggle if no mode provided
+            player.autoplay = not player.autoplay
+            status = "ON 🟢" if player.autoplay else "OFF 🔴"
+            desc = (f"Autoplay via **{player.autoplay_mode.title()}**."
+                    if player.autoplay
+                    else "Autoplay dimatikan.")
 
         await interaction.response.send_message(
             embed=EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
@@ -509,9 +522,13 @@ class Music(commands.Cog):
         )
 
         # Autoplay
+        ap_status = "OFF 🔴"
+        if player.autoplay:
+            ap_status = f"ON 🟢 ({player.autoplay_mode.title()})"
+            
         embed.add_field(
             name="🔄 Autoplay",
-            value="ON 🟢" if player.autoplay else "OFF 🔴",
+            value=ap_status,
             inline=True
         )
 
@@ -534,7 +551,7 @@ class Music(commands.Cog):
         embed.add_field(name="/queue", value="Tampilkan antrian lagu", inline=False)
         embed.add_field(name="/nowplaying", value="Tampilkan lagu yang sedang diputar", inline=False)
         embed.add_field(name="/loop `<mode>`", value="Atur mode loop (Off / Single / Queue)", inline=False)
-        embed.add_field(name="/autoplay", value="Toggle autoplay rekomendasi otomatis", inline=False)
+        embed.add_field(name="/autoplay `[mode]`", value="Toggle autoplay atau ganti mode (YouTube/Spotify)", inline=False)
         embed.add_field(name="/lyrics `[query]`", value="Cari lirik lagu dari Genius (kosongkan untuk lagu saat ini)", inline=False)
         embed.add_field(name="/status", value="Tampilkan status bot musik", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)

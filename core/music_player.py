@@ -14,6 +14,7 @@ import discord
 from core.queue_manager import QueueManager
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
+from utils.spotify_client import SpotifyClient
 
 logger = logging.getLogger('antigrafity.player')
 
@@ -43,6 +44,8 @@ class MusicPlayer:
         self.loop_mode: str = LoopMode.OFF
         self.shuffle_mode: int = ShuffleMode.OFF
         self.autoplay: bool = False
+        self.autoplay_mode: str = 'youtube'  # 'youtube' or 'spotify'
+        self.spotify = SpotifyClient()
         self.text_channel: discord.TextChannel | None = None
         self.now_playing_message: discord.Message | None = None
         self.lyrics_messages: list[discord.Message] = []  # Track lyrics messages for cleanup
@@ -312,8 +315,39 @@ class MusicPlayer:
         if not self.current or not self.current.url:
             return None
 
+        # 1. Try Spotify Mode first if enabled
+        if self.autoplay_mode == 'spotify':
+            try:
+                # Use current title + artist (uploader) as query
+                query = f"{self.current.title} {self.current.uploader}"
+                rec_query = await self.spotify.get_recommendation(query)
+                
+                if rec_query:
+                    logger.info(f'Autoplay (Spotify): Recommended "{rec_query}"')
+                    # Search this recommendation on YouTube
+                    # Use "ytsearch1:" + query
+                    entries, _ = await YTDLSource.get_info(rec_query, loop=self.bot.loop)
+                    if entries:
+                        data = entries[0]
+                        track = Track(
+                            source_url=data.get('url', ''), # Stream URL might be here
+                            title=data.get('title', 'Unknown'),
+                            url=data.get('webpage_url', ''),
+                            duration=data.get('duration', 0),
+                            thumbnail=data.get('thumbnail', ''),
+                            uploader=data.get('uploader', 'Unknown'),
+                            requester=self.bot.user
+                        )
+                        return track
+                else:
+                    logger.warning('Autoplay (Spotify): No recommendation found, falling back to YouTube.')
+            except Exception as e:
+                logger.error(f'Autoplay (Spotify) error: {e}')
+                # Fallback to YouTube logic below
+
+        # 2. YouTube Mode (Default / Fallback)
         try:
-            logger.info(f'Autoplay: searching related for "{self.current.title}"')
+            logger.info(f'Autoplay (YouTube): searching related for "{self.current.title}"')
 
             related = await YTDLSource.get_related(
                 self.current.url,

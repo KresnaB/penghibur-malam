@@ -3,3 +3,4 @@ git+https://github.com/yt-dlp/yt-dlp.git@master
 python-dotenv
 PyNaCl
 lyricsgenius
+spotipy

@@ -46,7 +46,7 @@ NOISE_KEYWORDS = [
 ]
 
 
-def _clean_title(title: str) -> str:
+def clean_title(title: str) -> str:
     """
     Clean YouTube title aggressively for Genius API search.
     Goal: return pure song title only.
@@ -89,7 +89,7 @@ def _clean_title(title: str) -> str:
     return cleaned if cleaned else original
 
 
-def _extract_metadata(query: str) -> dict:
+def extract_metadata(query: str) -> dict:
     """
     Attempt to extract artist and title from a query string.
     Returns dict with 'artist' and 'title' if successful, else content is just 'title'.
@@ -147,11 +147,11 @@ async def search_lyrics(query: str, *, loop: asyncio.AbstractEventLoop = None) -
     loop = loop or asyncio.get_event_loop()
 
     # 1. Clean the title
-    cleaned = _clean_title(query)
+    cleaned = clean_title(query)
     logger.info(f'Lyrics search: "{query}" → cleaned: "{cleaned}"')
 
     # 2. Extract metadata
-    metadata = _extract_metadata(cleaned)
+    metadata = extract_metadata(cleaned)
 
     # Helper to run sync search
     async def run_search(t, a=""):

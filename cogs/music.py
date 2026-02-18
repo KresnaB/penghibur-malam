@@ -17,6 +17,7 @@ from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
 from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
+from utils.lrclib_lyrics import get_lyrics as get_synced_lyrics
 
 logger = logging.getLogger('antigrafity.music')
 
@@ -364,8 +365,20 @@ class Music(commands.Cog):
                 )
                 return
 
-        # Search Genius
-        result = await search_lyrics(search_query, loop=self.bot.loop)
+        # Search Lrclib first
+        duration = None
+        if not query:
+             player = self.get_player(interaction.guild)
+             if player.current:
+                 duration = player.current.duration
+
+        logger.info(f"Lyrics command: Trying Lrclib for '{search_query}' duration={duration}")
+        result = await get_synced_lyrics(search_query, duration=duration)
+
+        # Fallback to Genius
+        if not result:
+            logger.info(f"Lyrics command: Lrclib failed, falling back to Genius for '{search_query}'")
+            result = await search_lyrics(search_query, loop=self.bot.loop)
 
         if not result:
             await interaction.followup.send(
@@ -377,23 +390,44 @@ class Music(commands.Cog):
             return
 
         # Build lyrics embed(s)
-        lyrics_text = result['lyrics']
+        # Check source to determine fields
+        source = result.get('source', 'Genius')
+        lyrics_text = result.get('syncedLyrics') if source == 'Lrclib' and result.get('syncedLyrics') else result.get('lyrics')
+        
+        # Fallback to plain if synced is preferred but not available
+        if not lyrics_text and source == 'Lrclib':
+             lyrics_text = result.get('lyrics')
+
+        if not lyrics_text:
+             await interaction.followup.send(
+                embed=EmbedBuilder.error(f"Konten lirik kosong ({source}).")
+            )
+             return
+
         chunks = split_lyrics(lyrics_text, max_length=4096)
+        
+        color = discord.Color.from_rgb(255, 255, 100) if source == 'Genius' else discord.Color.from_rgb(0, 255, 255)
 
         for i, chunk in enumerate(chunks):
             embed = discord.Embed(
-                title=f"🎤 {result['title']}" if i == 0 else f"🎤 {result['title']} (lanjutan)",
+                title=f"🎤 {result.get('title', search_query)}" if i == 0 else f"🎤 {result.get('title', search_query)} (lanjutan)",
                 description=chunk,
-                color=discord.Color.from_rgb(255, 255, 100)  # Genius yellow
+                color=color
             )
             if i == 0:
-                embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
-                embed.add_field(
-                    name="🔗 Genius",
-                    value=f"[Lihat di Genius]({result['url']})",
-                    inline=True
-                )
-            embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by Genius")
+                if result.get('artist'):
+                    embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
+                
+                if source == 'Genius':
+                    embed.add_field(
+                        name="🔗 Genius",
+                        value=f"[Lihat di Genius]({result['url']})",
+                        inline=True
+                    )
+                    if result.get('thumbnail'):
+                        embed.set_thumbnail(url=result['thumbnail'])
+            
+            embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by {source}")
 
             msg = await interaction.followup.send(embed=embed, wait=True)
             # Track for auto-delete when song changes

@@ -8,8 +8,9 @@ from discord import ui
 
 from utils.embed_builder import EmbedBuilder
 from utils.embed_builder import EmbedBuilder
-from utils.genius_lyrics import search_lyrics, split_lyrics
-from utils.lrclib_lyrics import get_lyrics as get_synced_lyrics
+from utils.embed_builder import EmbedBuilder
+from utils.genius_lyrics import split_lyrics # Keep split_lyrics
+from utils.lyrics_service import get_lyrics_concurrently
 
 
 class NowPlayingView(ui.View):
@@ -235,8 +236,9 @@ class NowPlayingView(ui.View):
             except Exception:
                 pass
 
-            # Search lyrics
-            result = await search_lyrics(self.player.current.title)
+            # Search Lyrics Concurrently (Race)
+            duration = self.player.current.duration if self.player.current else None
+            result = await get_lyrics_concurrently(self.player.current.title, duration=duration, loop=self.player.bot.loop)
 
             if not result:
                 await interaction.followup.send(
@@ -247,25 +249,37 @@ class NowPlayingView(ui.View):
                 return
 
             # Build and send lyrics embed(s)
-            lyrics_text = result['lyrics']
+            lyrics_text = result.get('lyrics') or result.get('syncedLyrics') # Fallback just in case
+            if not lyrics_text:
+                 await interaction.followup.send(
+                    embed=EmbedBuilder.error("Konten lirik kosong.")
+                )
+                 return
+
             chunks = split_lyrics(lyrics_text, max_length=4096)
+            
+            source = result.get('source', 'Unknown')
+            color = discord.Color.from_rgb(0, 255, 255) if source == 'Lrclib' else discord.Color.from_rgb(255, 255, 100)
 
             for i, chunk in enumerate(chunks):
                 embed = discord.Embed(
-                    title=f"🎤 {result['title']}" if i == 0 else f"🎤 {result['title']} (lanjutan)",
+                    title=f"🎤 {result.get('title', 'Lyrics')}" if i == 0 else f"🎤 {result.get('title', 'Lyrics')} (lanjutan)",
                     description=chunk,
-                    color=discord.Color.from_rgb(255, 255, 100)
+                    color=color
                 )
                 if i == 0:
-                    embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
-                    embed.add_field(
-                        name="🔗 Genius",
-                        value=f"[Lihat di Genius]({result['url']})",
-                        inline=True
-                    )
-                    if result.get('thumbnail'):
-                        embed.set_thumbnail(url=result['thumbnail'])
-                embed.set_footer(text="Omnia Music 🎶 • Lyrics powered by Genius")
+                    if result.get('artist'):
+                        embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
+                    if source == 'Genius':
+                        embed.add_field(
+                            name="🔗 Genius",
+                            value=f"[Lihat di Genius]({result['url']})",
+                            inline=True
+                        )
+                        if result.get('thumbnail'):
+                            embed.set_thumbnail(url=result['thumbnail'])
+                
+                embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by {source}")
 
                 msg = await interaction.followup.send(embed=embed, wait=True)
                 self.player.lyrics_messages.append(msg)
@@ -279,76 +293,4 @@ class NowPlayingView(ui.View):
             except:
                 pass
 
-    # ─────────── Synced Lyrics ───────────
 
-    @ui.button(emoji="🎼", label="Synced Lyrics", style=discord.ButtonStyle.secondary, row=1)
-    async def btn_synced(self, interaction: discord.Interaction, button: ui.Button):
-        """Fetch synced lyrics from Lrclib."""
-        try:
-            await interaction.response.defer()
-
-            if not self.player.current:
-                await interaction.followup.send(
-                    embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
-                    ephemeral=True
-                )
-                return
-
-            # Disable button to prevent spam
-            self.btn_synced.disabled = True
-            self.btn_synced.label = "Synced ✓"
-            self.btn_synced.style = discord.ButtonStyle.success
-            try:
-                if self.player.now_playing_message:
-                    await self.player.now_playing_message.edit(view=self)
-            except Exception:
-                pass
-
-            # Search Synced Lyrics
-            # Use duration if available for better matching
-            duration = self.player.current.duration if self.player.current.duration else None
-            result = await get_synced_lyrics(self.player.current.title, duration=duration)
-
-            if not result:
-                await interaction.followup.send(
-                    embed=EmbedBuilder.error(
-                        f"Lirik synced tidak ditemukan untuk: **{self.player.current.title}**"
-                    )
-                )
-                return
-
-            # Prefer syncedLyrics, fallback to lyrics (plain)
-            lyrics_text = result.get('syncedLyrics') or result.get('lyrics')
-            if not lyrics_text:
-                 await interaction.followup.send(
-                    embed=EmbedBuilder.error(
-                        f"Konten lirik kosong untuk: **{self.player.current.title}**"
-                    )
-                )
-                 return
-
-            chunks = split_lyrics(lyrics_text, max_length=4096)
-
-            for i, chunk in enumerate(chunks):
-                embed = discord.Embed(
-                    title=f"🎼 {result.get('title', 'Synced Lyrics')}" if i == 0 else f"🎼 {result.get('title', 'Synced Lyrics')} (lanjutan)",
-                    description=chunk,
-                    color=discord.Color.from_rgb(0, 255, 255) # Cyan for synced
-                )
-                if i == 0:
-                     if result.get('artist'):
-                        embed.add_field(name="🎙️ Artist", value=result['artist'], inline=True)
-                
-                embed.set_footer(text="Omnia Music 🎶 • Lyrics powered by Lrclib")
-
-                msg = await interaction.followup.send(embed=embed, wait=True)
-                self.player.lyrics_messages.append(msg)
-
-        except Exception as e:
-            print(f"Synced Lyrics button error: {e}")
-            try:
-                await interaction.followup.send(
-                    embed=EmbedBuilder.error("Gagal memuat lirik synced.")
-                )
-            except:
-                pass

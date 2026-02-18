@@ -73,13 +73,13 @@ async def get_lyrics(query: str, duration: int = None) -> dict | None:
     return None
 
 def _format_response(data: dict) -> dict:
-    """Standardize response to match what the bot expects (similar to Genius result)."""
+    """Standardize response. User requested PLAIN lyrics only."""
     return {
         'title': data.get('trackName'),
         'artist': data.get('artistName'),
         'lyrics': data.get('plainLyrics'),
-        'syncedLyrics': data.get('syncedLyrics'),
-        'url': None, # Lrclib doesn't provide a web viewer URL usually, maybe we can construct one or leave empty
+        'syncedLyrics': None, # User requested plain lyrics only
+        'url': None, 
         'thumbnail': None,
         'source': 'Lrclib'
     }

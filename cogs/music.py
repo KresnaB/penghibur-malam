@@ -17,7 +17,7 @@ from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
 from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
-from utils.lrclib_lyrics import get_lyrics as get_synced_lyrics
+from utils.lyrics_service import get_lyrics_concurrently
 
 logger = logging.getLogger('antigrafity.music')
 
@@ -365,20 +365,15 @@ class Music(commands.Cog):
                 )
                 return
 
-        # Search Lrclib first
+        # Search Lyrics Concurrently (Race)
         duration = None
         if not query:
              player = self.get_player(interaction.guild)
              if player.current:
                  duration = player.current.duration
 
-        logger.info(f"Lyrics command: Trying Lrclib for '{search_query}' duration={duration}")
-        result = await get_synced_lyrics(search_query, duration=duration)
-
-        # Fallback to Genius
-        if not result:
-            logger.info(f"Lyrics command: Lrclib failed, falling back to Genius for '{search_query}'")
-            result = await search_lyrics(search_query, loop=self.bot.loop)
+        logger.info(f"Lyrics command: Racing for '{search_query}' duration={duration}")
+        result = await get_lyrics_concurrently(search_query, duration=duration, loop=self.bot.loop)
 
         if not result:
             await interaction.followup.send(
@@ -390,14 +385,9 @@ class Music(commands.Cog):
             return
 
         # Build lyrics embed(s)
-        # Check source to determine fields
-        source = result.get('source', 'Genius')
-        lyrics_text = result.get('syncedLyrics') if source == 'Lrclib' and result.get('syncedLyrics') else result.get('lyrics')
+        lyrics_text = result.get('lyrics') or result.get('syncedLyrics')
+        source = result.get('source', 'Unknown')
         
-        # Fallback to plain if synced is preferred but not available
-        if not lyrics_text and source == 'Lrclib':
-             lyrics_text = result.get('lyrics')
-
         if not lyrics_text:
              await interaction.followup.send(
                 embed=EmbedBuilder.error(f"Konten lirik kosong ({source}).")
@@ -406,7 +396,7 @@ class Music(commands.Cog):
 
         chunks = split_lyrics(lyrics_text, max_length=4096)
         
-        color = discord.Color.from_rgb(255, 255, 100) if source == 'Genius' else discord.Color.from_rgb(0, 255, 255)
+        color = discord.Color.from_rgb(0, 255, 255) if source == 'Lrclib' else discord.Color.from_rgb(255, 255, 100)
 
         for i, chunk in enumerate(chunks):
             embed = discord.Embed(

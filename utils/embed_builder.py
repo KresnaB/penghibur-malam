@@ -82,14 +82,24 @@ class EmbedBuilder:
                     title = title[:37] + "..."
                 
                 line = f"`{i}.` **[{title}]({track.url})** [{track.duration_str}]\n"
+                
+                # Check if adding this line exceeds limit
+                if len(queue_text) + len(line) > 1000:
+                    remaining = len(tracks) - (i - 1) + (total_size - len(tracks))
+                    queue_text += f"\n*... dan {remaining} lagu lainnya*"
+                    break
+                
                 queue_text += line
 
-            if total_size > len(tracks):
-                queue_text += f"\n*... dan {total_size - len(tracks)} lagu lainnya*"
-
-            # Safety check
-            if len(queue_text) > 1024:
-                queue_text = queue_text[:1021] + "..."
+            # Handle case where we didn't break early but total_size > len(tracks)
+            # (e.g. tracks=20 but total=50)
+            if total_size > len(tracks) and len(queue_text) < 1000:
+                 remaining = total_size - len(tracks)
+                 footer = f"\n*... dan {remaining} lagu lainnya*"
+                 if len(queue_text) + len(footer) <= 1024:
+                     queue_text += footer
+                 else:
+                     queue_text += "\n*...*"
 
             embed.add_field(
                 name=f"📋 Antrian ({total_size} lagu)",

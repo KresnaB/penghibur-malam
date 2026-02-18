@@ -52,6 +52,26 @@ class QueueManager:
                 return self._queue.pop(index)
             return None
 
+    async def move(self, source_index: int, target_index: int) -> Optional[Track]:
+        """
+        Move a track from source_index to target_index (0-based).
+        Returns the moved track if successful, None otherwise.
+        """
+        async with self._lock:
+            if not (0 <= source_index < len(self._queue)):
+                return None
+            
+            # Clamp target index
+            if target_index < 0: target_index = 0
+            if target_index >= len(self._queue): target_index = len(self._queue) - 1
+
+            if source_index == target_index:
+                return self._queue[source_index]
+
+            track = self._queue.pop(source_index)
+            self._queue.insert(target_index, track)
+            return track
+
     async def shuffle(self, mode: int):
         """
         Shuffle the queue based on mode:
@@ -93,7 +113,7 @@ class QueueManager:
         """Get number of tracks in queue."""
         return len(self._queue)
 
-    def as_list(self, limit: int = 10) -> list[Track]:
+    def as_list(self, limit: int = 20) -> list[Track]:
         """Get a copy of the queue as a list, limited to `limit` items."""
         return self._queue[:limit]
 

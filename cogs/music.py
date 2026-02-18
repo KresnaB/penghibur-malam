@@ -298,7 +298,7 @@ class Music(commands.Cog):
         """Show the current queue."""
         player = self.get_player(interaction.guild)
 
-        tracks = player.queue.as_list(limit=10)
+        tracks = player.queue.as_list(limit=20)
         total = player.queue.size
         embed = EmbedBuilder.queue_list(tracks, player.current, total)
 
@@ -340,6 +340,57 @@ class Music(commands.Cog):
         embed.add_field(name="⚙️ Info", value=" • ".join(info_parts), inline=False)
 
         await interaction.response.send_message(embed=embed)
+
+    # ─────────── /move ───────────
+
+    @app_commands.command(name="move", description="Pindahkan lagu di queue ke posisi lain")
+    @app_commands.describe(from_pos="Posisi lagu sekarang (angka)", to_pos="Posisi tujuan (angka)")
+    async def move(self, interaction: discord.Interaction, from_pos: int, to_pos: int):
+        """Move a track in the queue."""
+        if not await self._ensure_voice(interaction):
+            return
+        if not await self._ensure_same_channel(interaction):
+            return
+
+        player = self.get_player(interaction.guild)
+        queue_size = player.queue.size
+
+        if queue_size < 1:
+             await interaction.response.send_message(
+                embed=EmbedBuilder.error("Queue kosong!"),
+                ephemeral=True
+            )
+             return
+
+        # Adjust indices (user input is 1-based, internal is 0-based)
+        src_idx = from_pos - 1
+        tgt_idx = to_pos - 1
+
+        # Validate source
+        if not (0 <= src_idx < queue_size):
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error(f"Posisi asal tidak valid! (1 - {queue_size})"),
+                ephemeral=True
+            )
+            return
+        
+        # Move track
+        moved_track = await player.queue.move(src_idx, tgt_idx)
+        
+        if moved_track:
+             # Clamp target index for display
+             final_pos = max(1, min(to_pos, queue_size))
+             await interaction.response.send_message(
+                embed=EmbedBuilder.success(
+                    "🚚 Moved",
+                    f"**{moved_track.title}** dipindahkan dari posisi **{from_pos}** ke **{final_pos}**."
+                )
+            )
+        else:
+             await interaction.response.send_message(
+                embed=EmbedBuilder.error("Gagal memindahkan lagu."),
+                ephemeral=True
+            )
 
     # ─────────────────────── /lyrics ───────────────────────
 

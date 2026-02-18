@@ -1,4 +1,4 @@
-# 🎵 Antigrafity Music Bot — Penghibur Malam
+# 🎵 Music Bot — Penghibur Malam
 
 Bot Discord pemutar musik dari YouTube dengan slash commands.
 

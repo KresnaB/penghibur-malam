@@ -12,6 +12,8 @@ logger = logging.getLogger('antigrafity.tastedive')
 _JUNK_KEYWORDS = [
     "kids", "children", "nursery", "compilation", "greatest hits",
     "karaoke", "soundtrack", "various", "top 40", "billboard", "radio hits",
+    "vlog", "q&a", "history", "exposing", "reaction", "official trailer",
+    "unboxing", "review", "tutorial", "how to", "gaming", "stream",
 ]
 
 def _is_junk(name: str) -> bool:
@@ -46,7 +48,7 @@ class TasteDiveAPI:
         params = {
             "q": query,
             "type": type_val,
-            "info": 0,          # Don't need descriptions, keeps response smaller
+            "info": 1,          # Need info=1 to get yID field
             "limit": limit,
             "k": api_key
         }
@@ -71,20 +73,24 @@ class TasteDiveAPI:
                 return []
 
     @staticmethod
-    async def get_recommendation_for_track(artist: str, track_title: str) -> str | None:
+    async def get_recommendation_for_track(artist: str, track_title: str) -> tuple[str, str | None] | None:
         """
         High-level helper to get a recommendation for a specific track.
-        Strategy (in order of priority):
+        Returns a tuple of (name, yID) where yID is a YouTube video ID, or None.
+        Strategy:
           1. Query "Artist - Title" (most specific, best for songs)
           2. Fallback to "Artist" only
-        
-        Returns an artist name to search on YouTube.
         """
         rec_items = []
         
         # 1. Try "Artist - Title" first — most specific, gives genre-matched results
         if artist and track_title:
-            specific_query = f"{artist} - {track_title}"
+            # Avoid "Artist - Artist - Song" if artist is already in title
+            if artist.lower() in track_title.lower():
+                specific_query = track_title
+            else:
+                specific_query = f"{artist} - {track_title}"
+                
             logger.info(f"TasteDive: Querying '{specific_query}'")
             rec_items = await TasteDiveAPI.get_recommendations(specific_query, type_val="music")
 
@@ -105,6 +111,8 @@ class TasteDiveAPI:
         # Pick one random recommendation
         choice = random.choice(pool)
         name = choice.get("name") or choice.get("Name")
+        # yID is a YouTube video ID linked to this artist/track — use it directly if available!
+        y_id = choice.get("yID")
         
-        logger.info(f"TasteDive: Picked '{name}' from {len(pool)} candidates")
-        return name
+        logger.info(f"TasteDive: Picked '{name}' (yID={y_id}) from {len(pool)} candidates")
+        return (name, y_id)

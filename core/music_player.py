@@ -337,25 +337,34 @@ class MusicPlayer:
                 
                 logger.info(f"Autoplay (TasteDive): Derived artist '{artist}' from '{self.current.uploader}' / '{self.current.title}'")
                 
-                recommendation_name = await TasteDiveAPI.get_recommendation_for_track(artist, self.current.title)
+                recommendation = await TasteDiveAPI.get_recommendation_for_track(artist, self.current.title)
                 
-                if recommendation_name:
+                if recommendation:
+                    recommendation_name, recommendation_yid = recommendation
                     logger.info(f"Autoplay (TasteDive): Recommended '{recommendation_name}'")
-                    # Initial search to find the URL
-                    # We use a specific query to youtube
-                    search_query = f"ytsearch:{recommendation_name}"
-                     # Use existing search logic or YTDLSource direct search
                     try:
-                        info, _ = await YTDLSource.get_info(search_query, loop=self.bot.loop)
-                        if info:
-                             # Use the first result
-                             first_result = info[0]
-                             chosen_url = first_result.get('webpage_url') or first_result.get('url')
-                             logger.info(f"Autoplay (TasteDive): Playing '{recommendation_name}' ({chosen_url})")
-                             
-                             # Create Track object directly
-                             _, data = await YTDLSource.from_url(chosen_url, loop=self.bot.loop)
-                             track = Track(
+                        # Prefer yID (guaranteed music video by TasteDive) over text search
+                        if recommendation_yid:
+                            chosen_url = f"https://www.youtube.com/watch?v={recommendation_yid}"
+                            logger.info(f"Autoplay (TasteDive): Using yID directly → {chosen_url}")
+                        else:
+                            # Fallback: text search with "music" keyword to avoid vlogs
+                            search_query = f"ytsearch:{recommendation_name} music"
+                            logger.info(f"Autoplay (TasteDive): No yID, searching '{search_query}'")
+                            info, _ = await YTDLSource.get_info(search_query, loop=self.bot.loop)
+                            if not info:
+                                logger.warning("Autoplay (TasteDive): Could not find recommendation on YouTube.")
+                                query_url = self.current.url
+                                chosen_url = None
+                            else:
+                                first_result = info[0]
+                                chosen_url = first_result.get('webpage_url') or first_result.get('url')
+                        
+                        if chosen_url:
+                            logger.info(f"Autoplay (TasteDive): Playing '{recommendation_name}' ({chosen_url})")
+                            # Create Track object directly
+                            _, data = await YTDLSource.from_url(chosen_url, loop=self.bot.loop)
+                            track = Track(
                                 source_url=data.get('url', ''),
                                 title=data.get('title', 'Unknown'),
                                 url=data.get('webpage_url', chosen_url),
@@ -363,15 +372,9 @@ class MusicPlayer:
                                 thumbnail=data.get('thumbnail', ''),
                                 uploader=data.get('uploader', 'Unknown'),
                                 requester=self.bot.user
-                             )
-                             return track
+                            )
+                            return track
 
-                        else:
-                             # Search returned nothing
-                             logger.warning("Autoplay (TasteDive): Could not find recommendation on YouTube.")
-                             # Find related to current track instead
-                             query_url = self.current.url 
-                             
                     except Exception as e:
                         logger.error(f"Autoplay (TasteDive): Search/Extract failed: {e}")
                         query_url = self.current.url

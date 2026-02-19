@@ -73,18 +73,16 @@ class TasteDiveAPI:
         
         rec_items = []
         
-        # 1. Try Artist Search
-        if artist:
-            logger.info(f"TasteDive: Searching similar to artist '{artist}'")
+        # 1. Try Full Track Query first (Better relevance)
+        # "Joji - Slow Dancing in the Dark" gives better results than just "Joji"
+        full_query = f"{artist} {track_title}"
+        logger.info(f"TasteDive: Searching similar to '{full_query}'")
+        rec_items = await TasteDiveAPI.get_recommendations(full_query, type_val="music")
+
+        # 2. Fallback to Artist Search if specific song fails
+        if not rec_items and artist:
+            logger.info(f"TasteDive: No results for song, falling back to artist '{artist}'")
             rec_items = await TasteDiveAPI.get_recommendations(artist, type_val="music")
-        
-        # 2. If no results and we have more info, maybe try query? 
-        # (Usually artist is enough. If artist fails, query might assume it's a movie/show?)
-        
-        if not rec_items:
-            logger.info("TasteDive: No results for artist, trying full query.")
-            full_query = f"{artist} {track_title}"
-            rec_items = await TasteDiveAPI.get_recommendations(full_query, type_val="music")
             
         if not rec_items:
             return None

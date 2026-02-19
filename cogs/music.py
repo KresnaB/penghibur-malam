@@ -533,6 +533,10 @@ class Music(commands.Cog):
             status = "OFF ⚪"
             desc = "Autoplay dimatikan."
 
+        # Trigger preload check if enabled
+        if player.autoplay_mode != AutoplayMode.OFF:
+            await player._trigger_autoplay_preload()
+
         await interaction.response.send_message(
             embed=EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
         )

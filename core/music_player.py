@@ -461,6 +461,15 @@ class MusicPlayer:
 
     # ─────────────────────── Preload Logic ───────────────────────
 
+    async def _trigger_autoplay_preload(self):
+        """
+        Manually trigger preload if autoplay is turned on mid-song.
+        Only runs if queue is empty and we are currently playing.
+        """
+        if self.queue.size == 0 and self.current and self.autoplay_mode != AutoplayMode.OFF:
+            logger.info("Autoplay toggled ON: Triggering immediate preload...")
+            self._schedule_preload()
+
     def _schedule_preload(self):
         """Schedule pre-loading of the next track."""
         self._cancel_preload()

@@ -200,6 +200,10 @@ class NowPlayingView(ui.View):
         else:
             self.player.autoplay_mode = AutoplayMode.OFF
             
+        # Trigger preload check if enabled
+        if self.player.autoplay_mode != AutoplayMode.OFF:
+             await self.player._trigger_autoplay_preload()
+
         await self._update_message(interaction)
 
     # ─────────── Queue ───────────

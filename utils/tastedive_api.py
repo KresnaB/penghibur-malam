@@ -29,12 +29,17 @@ class TasteDiveAPI:
         Get similar items from TasteDive.
         Returns a list of dicts: [{'Name': '...', 'yID': '...'}, ...]
         """
+        api_key = TasteDiveAPI.API_KEY or os.getenv("TASTEDIVE_API_KEY")
+        if not api_key:
+             logger.warning("TasteDive API Key is missing! recommendations will fail.")
+             return []
+
         params = {
             "q": query,
             "type": type_val,
             "info": 1,
             "limit": limit,
-            "k": TasteDiveAPI.API_KEY
+            "k": api_key
         }
         
         async with aiohttp.ClientSession() as session:

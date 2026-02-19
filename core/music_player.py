@@ -350,16 +350,30 @@ class MusicPlayer:
                         if info:
                              # Use the first result
                              first_result = info[0]
-                             query_url = first_result.get('webpage_url') or first_result.get('url')
-                             logger.info(f"Autoplay (TasteDive): Resolved '{recommendation_name}' to {query_url}")
+                             chosen_url = first_result.get('webpage_url') or first_result.get('url')
+                             logger.info(f"Autoplay (TasteDive): Playing '{recommendation_name}' ({chosen_url})")
+                             
+                             # Create Track object directly
+                             _, data = await YTDLSource.from_url(chosen_url, loop=self.bot.loop)
+                             track = Track(
+                                source_url=data.get('url', ''),
+                                title=data.get('title', 'Unknown'),
+                                url=data.get('webpage_url', chosen_url),
+                                duration=data.get('duration', 0),
+                                thumbnail=data.get('thumbnail', ''),
+                                uploader=data.get('uploader', 'Unknown'),
+                                requester=self.bot.user
+                             )
+                             return track
+
                         else:
+                             # Search returned nothing
                              logger.warning("Autoplay (TasteDive): Could not find recommendation on YouTube.")
-                             return None # Or fallback to YouTube related? Let's check user plan.
-                             # Plan says: "If TasteDive recommendations are exhausted or fail, the bot will fallback to YouTube autoplay or stop."
-                             # Let's fallback to YT related logic if this fails.
-                             query_url = self.current.url # Reset to current for related search
+                             # Find related to current track instead
+                             query_url = self.current.url 
+                             
                     except Exception as e:
-                        logger.error(f"Autoplay (TasteDive): Search failed: {e}")
+                        logger.error(f"Autoplay (TasteDive): Search/Extract failed: {e}")
                         query_url = self.current.url
                 else:
                     logger.warning("Autoplay (TasteDive): No recommendations found. Falling back to YouTube related.")

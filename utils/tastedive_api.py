@@ -91,7 +91,7 @@ class TasteDiveAPI:
             
         # Pick one random recommendation
         choice = random.choice(rec_items)
-        name = choice.get("Name")
+        name = choice.get("Name") or choice.get("name")
         
         # If it has a YouTube ID/Teaser, that's great, but we still prefer searching YT
         # ourselves to get the best audio stream, unless we trust yID.

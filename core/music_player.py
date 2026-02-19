@@ -14,6 +14,7 @@ import discord
 from core.queue_manager import QueueManager
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
+from utils.tastedive_api import TasteDiveAPI
 
 logger = logging.getLogger('antigrafity.player')
 
@@ -30,6 +31,12 @@ class ShuffleMode:
     ALTERNATIVE = 2
 
 
+class AutoplayMode:
+    OFF = 0
+    YOUTUBE = 1
+    TASTEDIVE = 2
+
+
 class MusicPlayer:
     """Music player instance for a single guild."""
 
@@ -42,7 +49,7 @@ class MusicPlayer:
         self.current: Track | None = None
         self.loop_mode: str = LoopMode.OFF
         self.shuffle_mode: int = ShuffleMode.OFF
-        self.autoplay: bool = False
+        self.autoplay_mode: int = AutoplayMode.OFF
         self.text_channel: discord.TextChannel | None = None
         self.now_playing_message: discord.Message | None = None
         self.lyrics_messages: list[discord.Message] = []  # Track lyrics messages for cleanup
@@ -136,7 +143,7 @@ class MusicPlayer:
 
         if next_track is None:
             # Queue empty — try autoplay
-            if self.autoplay and self.current:
+            if self.autoplay_mode != AutoplayMode.OFF and self.current:
                 # Check pre-fetched autoplay first
                 if self._next_autoplay:
                     next_track = self._next_autoplay
@@ -313,10 +320,56 @@ class MusicPlayer:
             return None
 
         try:
-            logger.info(f'Autoplay: searching related for "{self.current.title}"')
+            logger.info(f'Autoplay: searching related for "{self.current.title}" (Mode: {self.autoplay_mode})')
 
+            query_url = self.current.url
+            
+            # --- TASTEDIVE MODE ---
+            if self.autoplay_mode == AutoplayMode.TASTEDIVE:
+                # Try to get a recommendation from TasteDive
+                # self.current should have 'uploader' (artist) ideally, or we parse title.
+                artist = self.current.uploader.replace(" - Topic", "") # Clean up YT auto-generated channels
+                if "unknown" in artist.lower():
+                     # Try to parse from title "Artist - Title"
+                     parts = self.current.title.split("-")
+                     if len(parts) >= 2:
+                         artist = parts[0].strip()
+                
+                logger.info(f"Autoplay (TasteDive): Derived artist '{artist}' from '{self.current.uploader}' / '{self.current.title}'")
+                
+                recommendation_name = await TasteDiveAPI.get_recommendation_for_track(artist, self.current.title)
+                
+                if recommendation_name:
+                    logger.info(f"Autoplay (TasteDive): Recommended '{recommendation_name}'")
+                    # Initial search to find the URL
+                    # We use a specific query to youtube
+                    search_query = f"ytsearch:{recommendation_name}"
+                     # Use existing search logic or YTDLSource direct search
+                    try:
+                        info, _ = await YTDLSource.get_info(search_query, loop=self.bot.loop)
+                        if info:
+                             # Use the first result
+                             first_result = info[0]
+                             query_url = first_result.get('webpage_url') or first_result.get('url')
+                             logger.info(f"Autoplay (TasteDive): Resolved '{recommendation_name}' to {query_url}")
+                        else:
+                             logger.warning("Autoplay (TasteDive): Could not find recommendation on YouTube.")
+                             return None # Or fallback to YouTube related? Let's check user plan.
+                             # Plan says: "If TasteDive recommendations are exhausted or fail, the bot will fallback to YouTube autoplay or stop."
+                             # Let's fallback to YT related logic if this fails.
+                             query_url = self.current.url # Reset to current for related search
+                    except Exception as e:
+                        logger.error(f"Autoplay (TasteDive): Search failed: {e}")
+                        query_url = self.current.url
+                else:
+                    logger.warning("Autoplay (TasteDive): No recommendations found. Falling back to YouTube related.")
+                    query_url = self.current.url
+
+            # --- YOUTUBE / FALLBACK ---
+            # Default logic: Get related videos from YouTube
+            
             related = await YTDLSource.get_related(
-                self.current.url,
+                query_url,
                 title=self.current.title,
                 loop=self.bot.loop
             )
@@ -419,7 +472,7 @@ class MusicPlayer:
             next_track = await self.queue.peek_next()
             if not next_track:
                 # Queue is empty. If autoplay is ON, pre-fetch the recommendation!
-                if self.autoplay and self.current and not self._next_autoplay:
+                if self.autoplay_mode != AutoplayMode.OFF and self.current and not self._next_autoplay:
                      try:
                         logger.info(f"Pre-loading autoplay for: {self.current.title}")
                         # _get_autoplay_track returns a full Track object with source_url already resolved

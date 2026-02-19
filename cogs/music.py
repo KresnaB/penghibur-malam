@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.music_player import MusicPlayer, LoopMode
+from core.music_player import MusicPlayer, LoopMode, AutoplayMode
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
 from utils.now_playing_view import NowPlayingView
@@ -306,8 +306,10 @@ class Music(commands.Cog):
         status_parts = []
         if player.loop_mode != LoopMode.OFF:
             status_parts.append(f"🔁 Loop: **{player.loop_mode}**")
-        if player.autoplay:
-            status_parts.append("🔄 Autoplay: **ON**")
+        if player.autoplay_mode == AutoplayMode.YOUTUBE:
+            status_parts.append("🔄 Autoplay: **YouTube**")
+        elif player.autoplay_mode == AutoplayMode.TASTEDIVE:
+             status_parts.append("🔄 Autoplay: **TasteDive**")
         if status_parts:
             embed.add_field(name="⚙️ Status", value=" • ".join(status_parts), inline=False)
 
@@ -333,8 +335,9 @@ class Music(commands.Cog):
         info_parts = []
         if player.loop_mode != LoopMode.OFF:
             info_parts.append(f"🔁 Loop: {player.loop_mode}")
-        if player.autoplay:
-            info_parts.append("🔄 Autoplay: ON")
+        if player.autoplay_mode != AutoplayMode.OFF:
+            mode_name = "YouTube" if player.autoplay_mode == AutoplayMode.YOUTUBE else "TasteDive"
+            info_parts.append(f"🔄 Autoplay: {mode_name}")
         info_parts.append(f"📋 Queue: {player.queue.size} lagu")
 
         embed.add_field(name="⚙️ Info", value=" • ".join(info_parts), inline=False)
@@ -506,21 +509,29 @@ class Music(commands.Cog):
 
     # ─────────────────────── /autoplay ───────────────────────
 
-    @app_commands.command(name="autoplay", description="Toggle autoplay (rekomendasi otomatis)")
+    @app_commands.command(name="autoplay", description="Toggle autoplay (Off -> YouTube -> TasteDive)")
     async def autoplay(self, interaction: discord.Interaction):
-        """Toggle autoplay on/off."""
+        """Toggle autoplay mode."""
         if not await self._ensure_voice(interaction):
             return
         if not await self._ensure_same_channel(interaction):
             return
 
         player = self.get_player(interaction.guild)
-        player.autoplay = not player.autoplay
-
-        status = "ON 🟢" if player.autoplay else "OFF 🔴"
-        desc = ("Bot akan otomatis memutar lagu terkait saat queue kosong."
-                if player.autoplay
-                else "Autoplay dimatikan.")
+        
+        # Cycle: OFF -> YOUTUBE -> TASTEDIVE -> OFF
+        if player.autoplay_mode == AutoplayMode.OFF:
+            player.autoplay_mode = AutoplayMode.YOUTUBE
+            status = "YouTube 🔴"
+            desc = "Bot akan memutar rekomendasi YouTube saat queue kosong."
+        elif player.autoplay_mode == AutoplayMode.YOUTUBE:
+            player.autoplay_mode = AutoplayMode.TASTEDIVE
+            status = "TasteDive 🔵"
+            desc = "Bot akan memutar rekomendasi TasteDive (mirip artist) saat queue kosong."
+        else:
+            player.autoplay_mode = AutoplayMode.OFF
+            status = "OFF ⚪"
+            desc = "Autoplay dimatikan."
 
         await interaction.response.send_message(
             embed=EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
@@ -584,9 +595,15 @@ class Music(commands.Cog):
         )
 
         # Autoplay
+        ap_status = "OFF ⚪"
+        if player.autoplay_mode == AutoplayMode.YOUTUBE:
+            ap_status = "YouTube 🔴"
+        elif player.autoplay_mode == AutoplayMode.TASTEDIVE:
+            ap_status = "TasteDive 🔵"
+            
         embed.add_field(
             name="🔄 Autoplay",
-            value="ON 🟢" if player.autoplay else "OFF 🔴",
+            value=ap_status,
             inline=True
         )
 

@@ -18,6 +18,7 @@ class EmbedBuilder:
     COLOR_ERROR = discord.Color.from_rgb(231, 76, 60)      # Red
     COLOR_INFO = discord.Color.from_rgb(52, 152, 219)      # Blue
     COLOR_AUTOPLAY = discord.Color.from_rgb(255, 165, 0)   # Orange
+    COLOR_TASTEDIVE = discord.Color.from_rgb(0, 191, 255)  # Deep Sky Blue
 
     @staticmethod
     def now_playing(track: Track) -> discord.Embed:

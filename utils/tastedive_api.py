@@ -1,7 +1,6 @@
 import os
 import logging
 import aiohttp
-import urllib.parse
 import random
 from dotenv import load_dotenv
 
@@ -9,35 +8,45 @@ load_dotenv()
 
 logger = logging.getLogger('antigrafity.tastedive')
 
+# Known junk: compilations, playlists, non-artist results that TasteDive returns
+_JUNK_KEYWORDS = [
+    "kids", "children", "nursery", "compilation", "greatest hits",
+    "karaoke", "soundtrack", "various", "top 40", "billboard", "radio hits",
+]
+
+def _is_junk(name: str) -> bool:
+    name_lower = name.lower()
+    return any(k in name_lower for k in _JUNK_KEYWORDS)
+
+
 class TasteDiveAPI:
     """
     Wrapper for TasteDive API.
-    Handles case-insensitive JSON parsing (API sometimes returns 'Similar' vs 'similar').
+    Handles case-insensitive JSON parsing and filters irrelevant results.
     """
     
     API_KEY = os.getenv("TASTEDIVE_API_KEY")
     BASE_URL = "https://tastedive.com/api/similar"
     
-    # TasteDive might require a User-Agent to return valid JSON results
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
     @staticmethod
-    async def get_recommendations(query: str, type_val: str = "music", limit: int = 5) -> list[dict]:
+    async def get_recommendations(query: str, type_val: str = "music", limit: int = 10) -> list[dict]:
         """
         Get similar items from TasteDive.
-        Returns a list of dicts: [{'Name': '...', 'yID': '...'}, ...]
+        Returns a list of dicts: [{'name': '...', 'yID': '...'}, ...]
         """
         api_key = TasteDiveAPI.API_KEY or os.getenv("TASTEDIVE_API_KEY")
         if not api_key:
-             logger.warning("TasteDive API Key is missing! recommendations will fail.")
-             return []
+            logger.warning("TasteDive API Key is missing!")
+            return []
 
         params = {
             "q": query,
             "type": type_val,
-            "info": 1,
+            "info": 0,          # Don't need descriptions, keeps response smaller
             "limit": limit,
             "k": api_key
         }
@@ -46,7 +55,7 @@ class TasteDiveAPI:
             try:
                 async with session.get(TasteDiveAPI.BASE_URL, params=params, headers=TasteDiveAPI.HEADERS) as response:
                     if response.status != 200:
-                        logger.error(f"TasteDive API Error: {response.status} - {await response.text()}")
+                        logger.error(f"TasteDive API Error: {response.status}")
                         return []
                     
                     data = await response.json()
@@ -64,36 +73,38 @@ class TasteDiveAPI:
     @staticmethod
     async def get_recommendation_for_track(artist: str, track_title: str) -> str | None:
         """
-        High-level helper to get a recommendation query for a specific track.
-        Tries to search by 'Artist' first (TasteDive is better with bands).
-        Returns a query string suitable for YouTube search (e.g. 'Artist - Song').
-        """
-        # TasteDive works best with Artist names or Movie titles.
-        # Searching "Linkin Park" is better than "Numb Linkin Park".
+        High-level helper to get a recommendation for a specific track.
+        Strategy (in order of priority):
+          1. Query "Artist - Title" (most specific, best for songs)
+          2. Fallback to "Artist" only
         
+        Returns an artist name to search on YouTube.
+        """
         rec_items = []
         
-        # 1. Try Full Track Query first (Better relevance)
-        # "Joji - Slow Dancing in the Dark" gives better results than just "Joji"
-        full_query = f"{artist} {track_title}"
-        logger.info(f"TasteDive: Searching similar to '{full_query}'")
-        rec_items = await TasteDiveAPI.get_recommendations(full_query, type_val="music")
+        # 1. Try "Artist - Title" first — most specific, gives genre-matched results
+        if artist and track_title:
+            specific_query = f"{artist} - {track_title}"
+            logger.info(f"TasteDive: Querying '{specific_query}'")
+            rec_items = await TasteDiveAPI.get_recommendations(specific_query, type_val="music")
 
-        # 2. Fallback to Artist Search if specific song fails
+        # 2. Fallback to Artist only
         if not rec_items and artist:
-            logger.info(f"TasteDive: No results for song, falling back to artist '{artist}'")
+            logger.info(f"TasteDive: Falling back to artist query '{artist}'")
             rec_items = await TasteDiveAPI.get_recommendations(artist, type_val="music")
             
         if not rec_items:
             return None
-            
+
+        # Filter out junk results (compilations, karaoke, etc.)
+        good_items = [r for r in rec_items if not _is_junk(r.get("name") or r.get("Name") or "")]
+        
+        # Use filtered results if we have them, otherwise use all
+        pool = good_items if good_items else rec_items
+
         # Pick one random recommendation
-        choice = random.choice(rec_items)
-        name = choice.get("Name") or choice.get("name")
+        choice = random.choice(pool)
+        name = choice.get("name") or choice.get("Name")
         
-        # If it has a YouTube ID/Teaser, that's great, but we still prefer searching YT
-        # ourselves to get the best audio stream, unless we trust yID.
-        # But yID from TasteDive might be old/dead.
-        # Safe bet: Return the Name, let MusicPlayer search it.
-        
+        logger.info(f"TasteDive: Picked '{name}' from {len(pool)} candidates")
         return name

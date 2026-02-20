@@ -1,10 +1,10 @@
 @echo off
-title Penghibur Malam Bot - Discord Music
+title Omnia Music Bot - Discord
 color 0f
 cd /d "%~dp0"
 
 echo ------------------------------------------
-echo     DISCORD BOT: PENGHIBUR MALAM
+echo         DISCORD BOT: OMNIA MUSIC
 echo ------------------------------------------
 echo.
 echo [INFO] Menjalankan bot...

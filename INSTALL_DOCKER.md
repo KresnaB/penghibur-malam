@@ -1,6 +1,6 @@
-# Instalasi Penghibur Malam di CasaOS
+# Instalasi Omnia Music Bot dengan Docker (CasaOS / Portainer)
 
-Panduan ini khusus untuk pengguna **CasaOS**. Kita akan menggunakan terminal CasaOS untuk menjalankan bot di dalam container Docker.
+Panduan ini spesifik untuk menjalankan bot di dalam container Docker. Sangat dianjurkan untuk pengguna server CasaOS.
 
 ---
 

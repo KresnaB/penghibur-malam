@@ -1,6 +1,6 @@
-# 🎵 Music Bot — Penghibur Malam
+# 🎵 Omnia Music Bot
 
-Bot Discord pemutar musik dari YouTube dengan slash commands.
+Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash commands.
 
 ## ⚙️ Fitur
 
@@ -26,34 +26,24 @@ Bot Discord pemutar musik dari YouTube dengan slash commands.
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
 - **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)
 
-## 📦 Instalasi
+## 📦 Panduan Instalasi
 
-### 1. Install FFmpeg
-- **Windows**: Download dari [ffmpeg.org](https://ffmpeg.org/download.html), tambahkan ke PATH
-- **Linux**: `sudo apt install ffmpeg`
-- **Mac**: `brew install ffmpeg`
+Pilih metode instalasi yang paling sesuai dengan sistem eksosistem Anda:
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+### 🪟 Windows (Local Desktop)
+Metode termudah untuk dijalankan di PC Windows.
+1. Install **Python** & **FFmpeg** (pastikan FFmpeg sudah ditambahkan ke System Environment PATH).
+2. Install requirements: `pip install -r requirements.txt`
+3. Edit file `.env` dengan token Discord Anda.
+4. Klik dua kali pada file **`run_bot.bat`** untuk menjalankan bot dengan interface command prompt yang rapi.
 
-### 3. Konfigurasi
-Edit file `.env`:
-```
-DISCORD_TOKEN=token_bot_discord_kamu
-GENIUS_ACCESS_TOKEN=token_genius_api_kamu
-```
+### 🐧 Linux / Armbian Server
+Direkomendasikan apabila Anda menjalankan bot ini di VPS atau Private Server (misal baremetal Armbian). Termasuk langkah setup `systemd` agar bot beroperasi 24/7.
+👉 **[Pergi ke Panduan Instalasi Linux](INSTALL_LINUX.md)**
 
-### 4. Jalankan
-```bash
-python main.py
-```
-
-### 5. Jalankan dengan Docker
-```bash
-docker-compose up -d --build
-```
+### 🐳 Docker / CasaOS
+Metode terbaik untuk isolasi server (Container) dan *deployment* 1 klik yang bersih, sangat cocok untuk portainer / CasaOS.
+👉 **[Pergi ke Panduan Instalasi Docker](INSTALL_DOCKER.md)**
 
 ## 🏗️ Struktur Project
 

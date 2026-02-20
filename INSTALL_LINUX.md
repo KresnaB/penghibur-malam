@@ -1,6 +1,6 @@
-# Instalasi Penghibur Malam di Server Armbian
+# Instalasi Omnia Music Bot di Server Linux / Armbian
 
-Panduan lengkap untuk menjalankan bot musik Discord 24/7 di server Armbian.
+Panduan lengkap untuk menjalankan bot musik Discord 24/7 di server Linux.
 
 ---
 
@@ -62,7 +62,7 @@ Simpan: `Ctrl+O` → `Enter` → `Ctrl+X`
 python3 main.py
 ```
 
-Jika muncul `🎵 Penghibur Malam sudah online!`, bot berjalan dengan benar. Tekan `Ctrl+C` untuk stop.
+Jika muncul tulisan `Omnia Music Bot sudah online!`, bot berjalan dengan benar. Tekan `Ctrl+C` untuk stop.
 
 ---
 
@@ -76,7 +76,7 @@ sudo nano /etc/systemd/system/penghibur-malam.service
 Isi dengan (ganti `NAMA_USER` dengan username Armbian kamu, cek dengan perintah `whoami`):
 ```ini
 [Unit]
-Description=Penghibur Malam - Discord Music Bot
+Description=Omnia Music Bot - Discord
 After=network.target
 
 [Service]

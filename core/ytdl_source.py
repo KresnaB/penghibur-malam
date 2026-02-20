@@ -111,8 +111,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
             opts['extract_flat'] = 'in_playlist'
             opts['playlistend'] = 50  # Limit to 50 songs max
         elif is_search:
-             # Search: full extraction immediately for faster playback start
-            opts['extract_flat'] = False
+             # Search: use extract_flat to avoid downloading audio stream metadata up-front, making responses instant
+            opts['extract_flat'] = 'in_playlist'
 
         ydl = yt_dlp.YoutubeDL(opts)
         

@@ -19,11 +19,11 @@ from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
 from utils.lyrics_service import get_lyrics_concurrently
 
-logger = logging.getLogger('antigrafity.music')
+logger = logging.getLogger('omnia.music')
 
 
 class Music(commands.Cog):
-    """Music commands for Antigrafity bot."""
+    """Music commands for Omnia bot."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot

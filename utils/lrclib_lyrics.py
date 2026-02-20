@@ -3,7 +3,7 @@ import aiohttp
 import logging
 from utils.genius_lyrics import clean_title, extract_metadata
 
-logger = logging.getLogger('antigrafity.lrclib')
+logger = logging.getLogger('omnia.lrclib')
 
 async def get_lyrics(query: str, duration: int = None) -> dict | None:
     """

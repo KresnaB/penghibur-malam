@@ -1,5 +1,5 @@
 """
-Antigrafity Music Bot — Main Entry Point
+Omnia Music Bot — Main Entry Point
 Discord music bot with YouTube playback, queue, loop, autoplay, and auto disconnect.
 """
 
@@ -18,7 +18,7 @@ logging.basicConfig(
     format='%(asctime)s | %(name)-25s | %(levelname)-8s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
-logger = logging.getLogger('antigrafity')
+logger = logging.getLogger('omnia')
 
 # Reduce noise from discord.py and yt-dlp
 logging.getLogger('discord').setLevel(logging.WARNING)
@@ -44,7 +44,7 @@ intents.members = True
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
-    description='Antigrafity Music Bot 🎵'
+    description='Omnia Music Bot 🎵'
 )
 
 

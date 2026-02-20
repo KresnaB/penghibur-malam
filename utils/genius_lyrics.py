@@ -11,7 +11,7 @@ from functools import partial
 
 import lyricsgenius
 
-logger = logging.getLogger('antigrafity.lyrics')
+logger = logging.getLogger('omnia.lyrics')
 
 # Initialize Genius client
 _genius = None

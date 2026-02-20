@@ -5,7 +5,7 @@ from typing import Optional
 from utils.genius_lyrics import search_lyrics as search_genius
 from utils.lrclib_lyrics import get_lyrics as get_lrclib
 
-logger = logging.getLogger('antigrafity.lyrics_service')
+logger = logging.getLogger('omnia.lyrics_service')
 
 async def get_lyrics_concurrently(query: str, duration: int = None, loop: asyncio.AbstractEventLoop = None) -> Optional[dict]:
     """

@@ -15,7 +15,7 @@ from core.queue_manager import QueueManager
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
 
-logger = logging.getLogger('antigrafity.player')
+logger = logging.getLogger('omnia.player')
 
 
 class LoopMode:

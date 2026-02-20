@@ -26,23 +26,23 @@ class NowPlayingView(ui.View):
         # Pause/Resume button
         if self.player.is_paused:
             self.btn_pause.emoji = "▶️"
-            self.btn_pause.label = "Resume"
+            self.btn_pause.label = ""
             self.btn_pause.style = discord.ButtonStyle.success
         else:
             self.btn_pause.emoji = "⏸️"
-            self.btn_pause.label = "Pause"
+            self.btn_pause.label = ""
             self.btn_pause.style = discord.ButtonStyle.secondary
 
         # Loop button
         from core.music_player import LoopMode
         loop_styles = {
-            LoopMode.OFF: ("🔁", "Loop", discord.ButtonStyle.secondary),
-            LoopMode.SINGLE: ("🔂", "Loop: 1", discord.ButtonStyle.primary),
-            LoopMode.QUEUE: ("🔁", "Loop: All", discord.ButtonStyle.primary),
+            LoopMode.OFF: ("🔁", "", discord.ButtonStyle.secondary),
+            LoopMode.SINGLE: ("🔂", "", discord.ButtonStyle.primary),
+            LoopMode.QUEUE: ("🔁", "", discord.ButtonStyle.primary),
         }
         emoji, label, style = loop_styles.get(
             self.player.loop_mode,
-            ("🔁", "Loop", discord.ButtonStyle.secondary)
+            ("🔁", "", discord.ButtonStyle.secondary)
         )
         self.btn_loop.emoji = emoji
         self.btn_loop.label = label
@@ -65,18 +65,18 @@ class NowPlayingView(ui.View):
         if self.player.queue.size == 0:
             self.btn_shuffle.disabled = True
             self.btn_shuffle.style = discord.ButtonStyle.secondary
-            self.btn_shuffle.label = "Shuffle"
+            self.btn_shuffle.label = ""
         else:
             self.btn_shuffle.disabled = False
             if self.player.shuffle_mode == ShuffleMode.OFF:
                 self.btn_shuffle.style = discord.ButtonStyle.secondary
-                self.btn_shuffle.label = "Shuffle"
+                self.btn_shuffle.label = ""
             elif self.player.shuffle_mode == ShuffleMode.STANDARD:
                 self.btn_shuffle.style = discord.ButtonStyle.success
-                self.btn_shuffle.label = "Shuffle: Std"
+                self.btn_shuffle.label = ""
             elif self.player.shuffle_mode == ShuffleMode.ALTERNATIVE:
                 self.btn_shuffle.style = discord.ButtonStyle.primary
-                self.btn_shuffle.label = "Shuffle: Alt"
+                self.btn_shuffle.label = ""
 
     async def _update_message(self, interaction: discord.Interaction):
         """Update the embed and buttons after a button press."""
@@ -89,7 +89,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Pause/Resume ───────────
 
-    @ui.button(emoji="⏸️", label="Pause", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(emoji="⏸️", label="", style=discord.ButtonStyle.secondary, row=0)
     async def btn_pause(self, interaction: discord.Interaction, button: ui.Button):
         """Toggle pause/resume."""
         if self.player.is_paused:
@@ -100,7 +100,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Skip ───────────
 
-    @ui.button(emoji="⏭️", label="Skip", style=discord.ButtonStyle.primary, row=0)
+    @ui.button(emoji="⏭️", label="", style=discord.ButtonStyle.primary, row=0)
     async def btn_skip(self, interaction: discord.Interaction, button: ui.Button):
         """Skip current track."""
         try:
@@ -128,7 +128,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Stop ───────────
 
-    @ui.button(emoji="⏹️", label="Stop", style=discord.ButtonStyle.danger, row=0)
+    @ui.button(emoji="⏹️", label="", style=discord.ButtonStyle.danger, row=0)
     async def btn_stop(self, interaction: discord.Interaction, button: ui.Button):
         """Stop playback."""
         try:
@@ -148,7 +148,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Shuffle ───────────
 
-    @ui.button(emoji="🔀", label="Shuffle", style=discord.ButtonStyle.secondary, row=0)
+    @ui.button(emoji="🔀", label="", style=discord.ButtonStyle.secondary, row=0)
     async def btn_shuffle(self, interaction: discord.Interaction, button: ui.Button):
         """Cycle shuffle modes: Off -> Standard -> Alternative -> Off."""
         from core.music_player import ShuffleMode
@@ -174,7 +174,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Loop ───────────
 
-    @ui.button(emoji="🔁", label="Loop", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(emoji="🔁", label="", style=discord.ButtonStyle.secondary, row=1)
     async def btn_loop(self, interaction: discord.Interaction, button: ui.Button):
         """Cycle through loop modes: off → single → queue → off."""
         from core.music_player import LoopMode

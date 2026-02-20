@@ -9,7 +9,7 @@ import logging
 import discord
 import yt_dlp
 
-logger = logging.getLogger('antigrafity.ytdl')
+logger = logging.getLogger('omnia.ytdl')
 
 # yt-dlp configuration
 YTDL_FORMAT_OPTIONS = {

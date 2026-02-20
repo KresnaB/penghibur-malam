@@ -125,11 +125,14 @@ class MusicPlayer:
         if not vc or not vc.is_connected():
             logger.warning("Voice client is disconnected in play_next(). Attempting reconnect...")
             # If we lost connection but still have a channel to connect to
-            if self.guild.me.voice and self.guild.me.voice.channel:
+            voice_state = self.guild.me.voice
+            target_channel = voice_state.channel if voice_state else None
+
+            if target_channel:
                 try:
                      # Wait a moment before reconnecting
                      await asyncio.sleep(2)
-                     await self.connect(self.guild.me.voice.channel)
+                     await self.connect(target_channel)
                      logger.info("Successfully reconnected to voice channel.")
                      # Proceed as normal after successful reconnect
                      vc = self.voice_client

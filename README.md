@@ -23,6 +23,8 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 - **Auto disconnect** saat sendirian di VC
 - **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
 - **Playlist limit** maksimal 50 lagu per request
+- **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
+- **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)
 ## 🔑 Persiapan Bot Discord
 Sebelum menginstal bot di PC/Server Anda, Anda harus membuat bot di Discord Developer Portal terlebih dahulu.
 1. Buka [Discord Developer Portal](https://discord.com/developers/applications).
@@ -33,6 +35,12 @@ Sebelum menginstal bot di PC/Server Anda, Anda harus membuat bot di Discord Deve
 6. Centang `bot` dan `applications.commands`. Beri permission `Administrator` (atau sekurang-kurangnya permission kirim/baca pesan dan gabung/bicara di Voice Channel).
 7. Salin URL di bagian bawah halaman dan buka di browser untuk mengundang bot ke server Discord Anda.
 
+## 🎤 Persiapan Genius API (Lirik Lagu)
+Layanan lirik membutuhkan Genius token agar pencarian lebih akurat.
+1. Buka [Genius API Client](https://genius.com/api-clients).
+2. Buat "New API Client".
+3. Klik **Generate Access Token** dan simpan kredensial tersebut.
+
 ## 📦 Panduan Instalasi
 
 Pilih metode instalasi yang paling sesuai dengan sistem eksosistem Anda:
@@ -41,7 +49,11 @@ Pilih metode instalasi yang paling sesuai dengan sistem eksosistem Anda:
 Metode termudah untuk dijalankan di PC Windows.
 1. Install **Python** & **FFmpeg** (pastikan FFmpeg sudah ditambahkan ke System Environment PATH).
 2. Install requirements: `pip install -r requirements.txt`
-3. Edit file `.env` dengan token Discord Anda.
+3. Edit file `.env` dengan token Discord dan Genius Anda:
+```env
+DISCORD_TOKEN=token_bot_discord_kamu
+GENIUS_ACCESS_TOKEN=token_genius_api_kamu
+```
 4. Klik dua kali pada file **`run_bot.bat`** untuk menjalankan bot dengan interface command prompt yang rapi.
 
 ### 🐧 Linux / Armbian Server
@@ -51,6 +63,15 @@ Direkomendasikan apabila Anda menjalankan bot ini di VPS atau Private Server (mi
 ### 🐳 Docker / CasaOS
 Metode terbaik untuk isolasi server (Container) dan *deployment* 1 klik yang bersih, sangat cocok untuk portainer / CasaOS.
 👉 **[Pergi ke Panduan Instalasi Docker](INSTALL_DOCKER.md)**
+
+---
+
+## 🍪 Troubleshooting YouTube Error (Error 403 / Sign in to confirm)
+Jika bot tidak bisa memutar lagu karena diblokir YouTube (seperti IP terkena *ban* atau muncul peringatan usia/Sign in), Anda bisa memakai fitur `cookies.txt`:
+1. Ekspor *cookies* dari akun YouTube yang telah login di PC Anda menggunakan ekstensi semacam **Get cookies.txt LOCALLY**.
+2. Simpan hasilnya dengan nama `cookies.txt`.
+3. Letakkan file ini **tepat di *root* folder bot** (sejajar dengan file `main.py` dan `run_bot.bat`).
+4. yt-dlp akan otomatis mendeteksi file `cookies.txt` ini dan menggunakannya untuk menembus *error auth* tanpa perlu modifikasi *source code* lagi.
 
 ## 🏗️ Struktur Project
 

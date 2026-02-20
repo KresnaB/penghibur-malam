@@ -123,7 +123,25 @@ class MusicPlayer:
 
         vc = self.voice_client
         if not vc or not vc.is_connected():
-            return
+            logger.warning("Voice client is disconnected in play_next(). Attempting reconnect...")
+            # If we lost connection but still have a channel to connect to
+            if self.guild.me.voice and self.guild.me.voice.channel:
+                try:
+                     # Wait a moment before reconnecting
+                     await asyncio.sleep(2)
+                     await self.connect(self.guild.me.voice.channel)
+                     logger.info("Successfully reconnected to voice channel.")
+                     # Proceed as normal after successful reconnect
+                     vc = self.voice_client
+                     if not vc or not vc.is_connected():
+                         logger.error("Reconnect failed. Stopping playback.")
+                         return
+                except Exception as e:
+                     logger.error(f"Failed to auto-reconnect: {e}")
+                     return
+            else:
+                logger.warning("No voice channel found to reconnect to. Stopping playback.")
+                return
 
         # Handle loop modes
         if self.current and self.loop_mode == LoopMode.SINGLE:
@@ -226,17 +244,38 @@ class MusicPlayer:
 
         except Exception as e:
             logger.error(f'Error playing track: {e}')
+            
+            # Detect potential network/socket errors
+            error_str = str(e).lower()
+            is_network_error = any(err in error_str for err in ['socket', 'connection', 'reset', 'broken pipe', 'timeout'])
+            
             if self.text_channel:
-                embed = EmbedBuilder.error(f"Gagal memutar: **{next_track.title}**\n`{e}`")
-                try:
-                    await self.text_channel.send(embed=embed)
-                except discord.HTTPException:
-                    pass
+                 msg = f"Gagal memutar: **{next_track.title}**\n`{e}`"
+                 if is_network_error:
+                     msg += "\n*Tampaknya terjadi gangguan jaringan. Mencoba reconnect...*"
+                 embed = EmbedBuilder.error(msg)
+                 try:
+                     await self.text_channel.send(embed=embed)
+                 except discord.HTTPException:
+                     pass
             
             # Prevent rapid queue draining on network failure
             await asyncio.sleep(5)
             
-            # Try next track
+            if is_network_error:
+                 logger.warning("Network error detected. Refunding track to queue and attempting reconnect loop.")
+                 # Refund the track so it isn't lost
+                 await self.queue.put_front(next_track)
+                 self.current = None
+                 
+                 # Force disconnect to reset state so play_next() auto-reconnects cleanly
+                 try:
+                      if vc and vc.is_connected():
+                           await vc.disconnect(force=True)
+                 except Exception:
+                      pass
+            
+            # Try next track (which will trigger reconnect if disconnected, and play the refunded track)
             await self.play_next()
             return
 

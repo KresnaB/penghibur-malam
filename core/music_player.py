@@ -14,7 +14,6 @@ import discord
 from core.queue_manager import QueueManager
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
-from utils.tastedive_api import TasteDiveAPI
 
 logger = logging.getLogger('antigrafity.player')
 
@@ -34,7 +33,7 @@ class ShuffleMode:
 class AutoplayMode:
     OFF = 0
     YOUTUBE = 1
-    TASTEDIVE = 2
+    CUSTOM = 2
 
 
 class MusicPlayer:
@@ -324,65 +323,7 @@ class MusicPlayer:
 
             query_url = self.current.url
             
-            # --- TASTEDIVE MODE ---
-            if self.autoplay_mode == AutoplayMode.TASTEDIVE:
-                # Try to get a recommendation from TasteDive
-                # self.current should have 'uploader' (artist) ideally, or we parse title.
-                artist = self.current.uploader.replace(" - Topic", "") # Clean up YT auto-generated channels
-                if "unknown" in artist.lower():
-                     # Try to parse from title "Artist - Title"
-                     parts = self.current.title.split("-")
-                     if len(parts) >= 2:
-                         artist = parts[0].strip()
-                
-                logger.info(f"Autoplay (TasteDive): Derived artist '{artist}' from '{self.current.uploader}' / '{self.current.title}'")
-                
-                recommendation = await TasteDiveAPI.get_recommendation_for_track(artist, self.current.title)
-                
-                if recommendation:
-                    recommendation_name, recommendation_yid = recommendation
-                    logger.info(f"Autoplay (TasteDive): Recommended '{recommendation_name}'")
-                    try:
-                        # Prefer yID (guaranteed music video by TasteDive) over text search
-                        if recommendation_yid:
-                            chosen_url = f"https://www.youtube.com/watch?v={recommendation_yid}"
-                            logger.info(f"Autoplay (TasteDive): Using yID directly → {chosen_url}")
-                        else:
-                            # Fallback: text search with "music" keyword to avoid vlogs
-                            search_query = f"ytsearch:{recommendation_name} music"
-                            logger.info(f"Autoplay (TasteDive): No yID, searching '{search_query}'")
-                            info, _ = await YTDLSource.get_info(search_query, loop=self.bot.loop)
-                            if not info:
-                                logger.warning("Autoplay (TasteDive): Could not find recommendation on YouTube.")
-                                query_url = self.current.url
-                                chosen_url = None
-                            else:
-                                first_result = info[0]
-                                chosen_url = first_result.get('webpage_url') or first_result.get('url')
-                        
-                        if chosen_url:
-                            logger.info(f"Autoplay (TasteDive): Playing '{recommendation_name}' ({chosen_url})")
-                            # Create Track object directly
-                            _, data = await YTDLSource.from_url(chosen_url, loop=self.bot.loop)
-                            track = Track(
-                                source_url=data.get('url', ''),
-                                title=data.get('title', 'Unknown'),
-                                url=data.get('webpage_url', chosen_url),
-                                duration=data.get('duration', 0),
-                                thumbnail=data.get('thumbnail', ''),
-                                uploader=data.get('uploader', 'Unknown'),
-                                requester=self.bot.user
-                            )
-                            return track
-
-                    except Exception as e:
-                        logger.error(f"Autoplay (TasteDive): Search/Extract failed: {e}")
-                        query_url = self.current.url
-                else:
-                    logger.warning("Autoplay (TasteDive): No recommendations found. Falling back to YouTube related.")
-                    query_url = self.current.url
-
-            # --- YOUTUBE / FALLBACK ---
+            # --- YOUTUBE ---
             # Default logic: Get related videos from YouTube
             
             related = await YTDLSource.get_related(
@@ -405,8 +346,33 @@ class MusicPlayer:
                 logger.info('Autoplay: all related tracks already played, using full list')
                 fresh = related  # Fallback if everything was played
 
-            # Pick a random one from the filtered results
-            chosen = random.choice(fresh)
+            if self.autoplay_mode == AutoplayMode.CUSTOM:
+                # Custom scoring (Explorative + Related) without cover/live penalty
+                def score_video(video):
+                    score = random.uniform(0, 10) # Explorative randomness
+                    title = video.get('title', '').lower()
+                    
+                    # Boost for related artist
+                    current_uploader = self.current.uploader.lower() if self.current.uploader else ""
+                    if current_uploader and len(current_uploader) > 2 and current_uploader in title:
+                         score += 5
+                         
+                    # Boost for related words
+                    current_words = [w for w in self.current.title.lower().split() if len(w) > 3]
+                    match_count = sum(1 for w in current_words if w in title)
+                    score += match_count * 2
+                    
+                    return score
+
+                fresh.sort(key=score_video, reverse=True)
+                # Pick randomly from the top 3 scored candidates for an explorative edge
+                candidates = fresh[:3]
+                chosen = random.choice(candidates)
+                logger.info(f'Autoplay (Custom): Top candidates -> {[c.get("title") for c in candidates]}')
+            else:
+                # Pick a random one from the filtered results (original pure YouTube mode)
+                chosen = random.choice(fresh)
+
             chosen_url = chosen['url'] if isinstance(chosen, dict) else chosen
 
             logger.info(f'Autoplay: chose "{chosen.get("title", chosen_url) if isinstance(chosen, dict) else chosen_url}"')

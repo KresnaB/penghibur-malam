@@ -308,8 +308,8 @@ class Music(commands.Cog):
             status_parts.append(f"🔁 Loop: **{player.loop_mode}**")
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
             status_parts.append("🔄 Autoplay: **YouTube**")
-        elif player.autoplay_mode == AutoplayMode.TASTEDIVE:
-             status_parts.append("🔄 Autoplay: **TasteDive**")
+        elif player.autoplay_mode == AutoplayMode.CUSTOM:
+            status_parts.append("🔄 Autoplay: **Custom**")
         if status_parts:
             embed.add_field(name="⚙️ Status", value=" • ".join(status_parts), inline=False)
 
@@ -336,7 +336,7 @@ class Music(commands.Cog):
         if player.loop_mode != LoopMode.OFF:
             info_parts.append(f"🔁 Loop: {player.loop_mode}")
         if player.autoplay_mode != AutoplayMode.OFF:
-            mode_name = "YouTube" if player.autoplay_mode == AutoplayMode.YOUTUBE else "TasteDive"
+            mode_name = "YouTube" if player.autoplay_mode == AutoplayMode.YOUTUBE else "Custom"
             info_parts.append(f"🔄 Autoplay: {mode_name}")
         info_parts.append(f"📋 Queue: {player.queue.size} lagu")
 
@@ -509,7 +509,7 @@ class Music(commands.Cog):
 
     # ─────────────────────── /autoplay ───────────────────────
 
-    @app_commands.command(name="autoplay", description="Toggle autoplay (Off -> YouTube -> TasteDive)")
+    @app_commands.command(name="autoplay", description="Toggle autoplay (Off -> YouTube -> Custom)")
     async def autoplay(self, interaction: discord.Interaction):
         """Toggle autoplay mode."""
         if not await self._ensure_voice(interaction):
@@ -519,15 +519,15 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
         
-        # Cycle: OFF -> YOUTUBE -> TASTEDIVE -> OFF
+        # Cycle: OFF -> YOUTUBE -> CUSTOM -> OFF
         if player.autoplay_mode == AutoplayMode.OFF:
             player.autoplay_mode = AutoplayMode.YOUTUBE
             status = "YouTube 🔴"
-            desc = "Bot akan memutar rekomendasi YouTube saat queue kosong."
+            desc = "Bot akan memutar rekomendasi dasar dari YouTube saat queue kosong."
         elif player.autoplay_mode == AutoplayMode.YOUTUBE:
-            player.autoplay_mode = AutoplayMode.TASTEDIVE
-            status = "TasteDive 🔵"
-            desc = "Bot akan memutar rekomendasi TasteDive (mirip artist) saat queue kosong."
+            player.autoplay_mode = AutoplayMode.CUSTOM
+            status = "Custom 🟣"
+            desc = "Bot menggunakan smart filtering (Relevan + Eksploratif) saat queue kosong."
         else:
             player.autoplay_mode = AutoplayMode.OFF
             status = "OFF ⚪"
@@ -602,8 +602,8 @@ class Music(commands.Cog):
         ap_status = "OFF ⚪"
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
             ap_status = "YouTube 🔴"
-        elif player.autoplay_mode == AutoplayMode.TASTEDIVE:
-            ap_status = "TasteDive 🔵"
+        elif player.autoplay_mode == AutoplayMode.CUSTOM:
+            ap_status = "Custom 🟣"
             
         embed.add_field(
             name="🔄 Autoplay",

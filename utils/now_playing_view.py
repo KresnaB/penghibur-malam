@@ -53,8 +53,8 @@ class NowPlayingView(ui.View):
         if self.player.autoplay_mode == AutoplayMode.YOUTUBE:
             self.btn_autoplay.label = "Autoplay: YT"
             self.btn_autoplay.style = discord.ButtonStyle.success
-        elif self.player.autoplay_mode == AutoplayMode.TASTEDIVE:
-            self.btn_autoplay.label = "Autoplay: TD"
+        elif self.player.autoplay_mode == AutoplayMode.CUSTOM:
+            self.btn_autoplay.label = "Autoplay: Custom"
             self.btn_autoplay.style = discord.ButtonStyle.primary
         else:
             self.btn_autoplay.label = "Autoplay"
@@ -190,13 +190,13 @@ class NowPlayingView(ui.View):
 
     @ui.button(emoji="🔄", label="Autoplay", style=discord.ButtonStyle.secondary, row=1)
     async def btn_autoplay(self, interaction: discord.Interaction, button: ui.Button):
-        """Cycle autoplay: Off -> YouTube -> TasteDive -> Off."""
+        """Cycle autoplay: Off -> YouTube -> Custom -> Off."""
         from core.music_player import AutoplayMode
         
         if self.player.autoplay_mode == AutoplayMode.OFF:
             self.player.autoplay_mode = AutoplayMode.YOUTUBE
         elif self.player.autoplay_mode == AutoplayMode.YOUTUBE:
-            self.player.autoplay_mode = AutoplayMode.TASTEDIVE
+            self.player.autoplay_mode = AutoplayMode.CUSTOM
         else:
             self.player.autoplay_mode = AutoplayMode.OFF
             

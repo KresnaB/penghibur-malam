@@ -99,3 +99,8 @@ penghibur-malam/
 - **PyNaCl** (voice encryption)
 - **lyricsgenius** (Genius API lyrics)
 - **Docker** (containerization)
+
+## 📄 Lisensi
+[Omnia Music Bot - Non-Commercial License](LICENSE)
+
+Proyek ini gratis digunakan untuk kebutuhan pribadi, komunitas kecil, maupun edukasi secara terbuka. Namun **tidak diizinkan** untuk diperjualbelikan, atau digunakan di dalam produk/layanan komersial lainnya. Silakan baca file `LICENSE` secara lengkap untuk detail hak cipta.

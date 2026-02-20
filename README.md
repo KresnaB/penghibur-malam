@@ -23,8 +23,15 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 - **Auto disconnect** saat sendirian di VC
 - **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
 - **Playlist limit** maksimal 50 lagu per request
-- **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
-- **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)
+## 🔑 Persiapan Bot Discord
+Sebelum menginstal bot di PC/Server Anda, Anda harus membuat bot di Discord Developer Portal terlebih dahulu.
+1. Buka [Discord Developer Portal](https://discord.com/developers/applications).
+2. Buat aplikasi baru ("New Application") dan beri nama (misal: "Omnia Music").
+3. Buka tab **Bot**, lalu klik **Reset Token** dan simpan token tersebut (INI SANGAT RAHASIA).
+4. Gulir ke bawah pada tab Bot, pastikan mengaktifkan `Message Content Intent`, `Server Members Intent`, dan `Presence Intent`.
+5. Buka tab **OAuth2 > URL Generator**.
+6. Centang `bot` dan `applications.commands`. Beri permission `Administrator` (atau sekurang-kurangnya permission kirim/baca pesan dan gabung/bicara di Voice Channel).
+7. Salin URL di bagian bawah halaman dan buka di browser untuk mengundang bot ke server Discord Anda.
 
 ## 📦 Panduan Instalasi
 

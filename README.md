@@ -13,7 +13,7 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 | `/move <from> <to>` | Pindahkan lagu di queue |
 | `/nowplaying` | Info lagu yang diputar |
 | `/loop <off\|single\|queue>` | Atur mode loop |
-| `/autoplay` | Toggle autoplay rekomendasi |
+| `/autoplay [mode]` | Atur mode autoplay (Youtube/Custom1/Custom2) |
 | `/lyrics [query]` | Cari lirik lagu (Lrclib/Genius) |
 | `/status` | Tampilkan status bot |
 | `/help` | Tampilkan daftar command |
@@ -21,7 +21,7 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 ### 🔧 Fitur Otomatis
 - **Auto disconnect** saat idle 3 menit
 - **Auto disconnect** saat sendirian di VC
-- **Autoplay** memutar lagu terkait otomatis jika diaktifkan (tanpa duplikat)
+- **Autoplay** memutar lagu terkait otomatis secara cerdas. Tersedia mode YouTube (dasar), Custom 1 (relevan), dan Custom 2 (eksploratif).
 - **Playlist limit** maksimal 50 lagu per request
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
 - **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)

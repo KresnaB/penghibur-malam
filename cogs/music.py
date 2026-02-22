@@ -309,7 +309,9 @@ class Music(commands.Cog):
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
             status_parts.append("🔄 Autoplay: **YouTube**")
         elif player.autoplay_mode == AutoplayMode.CUSTOM:
-            status_parts.append("🔄 Autoplay: **Custom**")
+            status_parts.append("🔄 Autoplay: **Custom 1**")
+        elif player.autoplay_mode == AutoplayMode.CUSTOM2:
+            status_parts.append("🔄 Autoplay: **Custom 2**")
         if status_parts:
             embed.add_field(name="⚙️ Status", value=" • ".join(status_parts), inline=False)
 
@@ -336,7 +338,12 @@ class Music(commands.Cog):
         if player.loop_mode != LoopMode.OFF:
             info_parts.append(f"🔁 Loop: {player.loop_mode}")
         if player.autoplay_mode != AutoplayMode.OFF:
-            mode_name = "YouTube" if player.autoplay_mode == AutoplayMode.YOUTUBE else "Custom"
+            if player.autoplay_mode == AutoplayMode.YOUTUBE:
+                mode_name = "YouTube"
+            elif player.autoplay_mode == AutoplayMode.CUSTOM:
+                mode_name = "Custom 1"
+            else:
+                mode_name = "Custom 2"
             info_parts.append(f"🔄 Autoplay: {mode_name}")
         info_parts.append(f"📋 Queue: {player.queue.size} lagu")
 
@@ -509,9 +516,16 @@ class Music(commands.Cog):
 
     # ─────────────────────── /autoplay ───────────────────────
 
-    @app_commands.command(name="autoplay", description="Toggle autoplay (Off -> YouTube -> Custom)")
-    async def autoplay(self, interaction: discord.Interaction):
-        """Toggle autoplay mode."""
+    @app_commands.command(name="autoplay", description="Atur mode autoplay")
+    @app_commands.describe(mode="Pilih mode autoplay: off, youtube, custom1, atau custom2")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="🚫 Off", value="off"),
+        app_commands.Choice(name="🔴 YouTube", value="youtube"),
+        app_commands.Choice(name="🟣 Custom 1", value="custom1"),
+        app_commands.Choice(name="🟠 Custom 2", value="custom2"),
+    ])
+    async def autoplay(self, interaction: discord.Interaction, mode: str):
+        """Set autoplay mode."""
         if not await self._ensure_voice(interaction):
             return
         if not await self._ensure_same_channel(interaction):
@@ -519,15 +533,18 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
         
-        # Cycle: OFF -> YOUTUBE -> CUSTOM -> OFF
-        if player.autoplay_mode == AutoplayMode.OFF:
+        if mode == "youtube":
             player.autoplay_mode = AutoplayMode.YOUTUBE
             status = "YouTube 🔴"
             desc = "Bot akan memutar rekomendasi dasar dari YouTube saat queue kosong."
-        elif player.autoplay_mode == AutoplayMode.YOUTUBE:
+        elif mode == "custom1":
             player.autoplay_mode = AutoplayMode.CUSTOM
-            status = "Custom 🟣"
+            status = "Custom 1 🟣"
             desc = "Bot menggunakan smart filtering (Relevan + Eksploratif) saat queue kosong."
+        elif mode == "custom2":
+            player.autoplay_mode = AutoplayMode.CUSTOM2
+            status = "Custom 2 🟠"
+            desc = "Bot menggunakan rekomendasi eksploratif yang prioritasnya mencari artis/genre baru."
         else:
             player.autoplay_mode = AutoplayMode.OFF
             status = "OFF ⚪"
@@ -603,7 +620,9 @@ class Music(commands.Cog):
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
             ap_status = "YouTube 🔴"
         elif player.autoplay_mode == AutoplayMode.CUSTOM:
-            ap_status = "Custom 🟣"
+            ap_status = "Custom 1 🟣"
+        elif player.autoplay_mode == AutoplayMode.CUSTOM2:
+            ap_status = "Custom 2 🟠"
             
         embed.add_field(
             name="🔄 Autoplay",

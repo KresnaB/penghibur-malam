@@ -34,6 +34,7 @@ class AutoplayMode:
     OFF = 0
     YOUTUBE = 1
     CUSTOM = 2
+    CUSTOM2 = 3
 
 
 class MusicPlayer:
@@ -388,7 +389,7 @@ class MusicPlayer:
                 logger.info('Autoplay: all related tracks already played, using full list')
                 fresh = related  # Fallback if everything was played
 
-            if self.autoplay_mode == AutoplayMode.CUSTOM:
+            if self.autoplay_mode in (AutoplayMode.CUSTOM, AutoplayMode.CUSTOM2):
                 # Custom scoring (Explorative + Related) without cover/live penalty
                 def score_video(video):
                     score = random.uniform(0, 10) # Explorative randomness
@@ -399,18 +400,23 @@ class MusicPlayer:
                     if current_uploader and len(current_uploader) > 2 and current_uploader in title:
                          score += 5
                          
-                    # Boost for related words
+                    # Boost/Penalty for related words
                     current_words = [w for w in self.current.title.lower().split() if len(w) > 3]
                     match_count = sum(1 for w in current_words if w in title)
-                    score += match_count * 2
+                    if self.autoplay_mode == AutoplayMode.CUSTOM2:
+                        score -= match_count * 2  # Explorative: penalize exact matches
+                    else:
+                        score += match_count * 2
                     
                     return score
 
                 fresh.sort(key=score_video, reverse=True)
-                # Pick randomly from the top 3 scored candidates for an explorative edge
-                candidates = fresh[:3]
+                # Pick randomly from the top candidates
+                num_candidates = 10 if self.autoplay_mode == AutoplayMode.CUSTOM2 else 3
+                candidates = fresh[:num_candidates]
                 chosen = random.choice(candidates)
-                logger.info(f'Autoplay (Custom): Top candidates -> {[c.get("title") for c in candidates]}')
+                mode_name = "Custom 2" if self.autoplay_mode == AutoplayMode.CUSTOM2 else "Custom"
+                logger.info(f'Autoplay ({mode_name}): Top candidates -> {[c.get("title") for c in candidates]}')
             else:
                 # Pick a random one from the filtered results (original pure YouTube mode)
                 chosen = random.choice(fresh)

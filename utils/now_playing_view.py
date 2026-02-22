@@ -50,17 +50,18 @@ class NowPlayingView(ui.View):
 
         # Autoplay button
         from core.music_player import AutoplayMode
+        self.btn_autoplay.label = ""
         if self.player.autoplay_mode == AutoplayMode.YOUTUBE:
-            self.btn_autoplay.label = "Autoplay: YT"
+            self.btn_autoplay.emoji = "🔴"
             self.btn_autoplay.style = discord.ButtonStyle.success
         elif self.player.autoplay_mode == AutoplayMode.CUSTOM:
-            self.btn_autoplay.label = "Autoplay: Custom 1"
+            self.btn_autoplay.emoji = "🟣"
             self.btn_autoplay.style = discord.ButtonStyle.primary
         elif self.player.autoplay_mode == AutoplayMode.CUSTOM2:
-            self.btn_autoplay.label = "Autoplay: Custom 2"
+            self.btn_autoplay.emoji = "🟠"
             self.btn_autoplay.style = discord.ButtonStyle.danger
         else:
-            self.btn_autoplay.label = "Autoplay"
+            self.btn_autoplay.emoji = "⚪"
             self.btn_autoplay.style = discord.ButtonStyle.secondary
 
         # Shuffle button
@@ -191,7 +192,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Autoplay ───────────
 
-    @ui.button(emoji="🔄", label="Autoplay", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(emoji="⚪", label="", style=discord.ButtonStyle.secondary, row=1)
     async def btn_autoplay(self, interaction: discord.Interaction, button: ui.Button):
         """Cycle autoplay: Off -> YouTube -> Custom -> Custom 2 -> Off."""
         from core.music_player import AutoplayMode
@@ -213,7 +214,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Queue ───────────
 
-    @ui.button(emoji="📜", label="Queue", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(emoji="📜", label="", style=discord.ButtonStyle.secondary, row=1)
     async def btn_queue(self, interaction: discord.Interaction, button: ui.Button):
         """Show the queue."""
         try:
@@ -234,7 +235,7 @@ class NowPlayingView(ui.View):
 
     # ─────────── Lyrics ───────────
 
-    @ui.button(emoji="🎤", label="Lyrics", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(emoji="🎤", label="", style=discord.ButtonStyle.secondary, row=1)
     async def btn_lyrics(self, interaction: discord.Interaction, button: ui.Button):
         """Fetch lyrics for the current track."""
         try:
@@ -249,7 +250,8 @@ class NowPlayingView(ui.View):
 
             # Disable button to prevent spam
             self.btn_lyrics.disabled = True
-            self.btn_lyrics.label = "Lyrics ✓"
+            self.btn_lyrics.label = ""
+            self.btn_lyrics.emoji = "✅"
             self.btn_lyrics.style = discord.ButtonStyle.success
             try:
                 if self.player.now_playing_message:

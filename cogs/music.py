@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 import discord
 from discord import app_commands
@@ -18,6 +19,7 @@ from utils.embed_builder import EmbedBuilder
 from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
 from utils.lyrics_service import get_lyrics_concurrently
+from utils.playlist_store import PlaylistStore
 
 logger = logging.getLogger('omnia.music')
 
@@ -28,6 +30,9 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, MusicPlayer] = {}  # guild_id -> MusicPlayer
+        # Shared playlist storage (per guild, shared by all users)
+        base_path = Path(__file__).resolve().parent.parent
+        self.playlists = PlaylistStore(base_path / "playlists.json")
 
     def get_player(self, guild: discord.Guild) -> MusicPlayer:
         """Get or create MusicPlayer for a guild."""
@@ -456,6 +461,69 @@ class Music(commands.Cog):
 
         await interaction.response.send_message(embed=embed)
 
+    # ─────────────────────── /playlist ───────────────────────
+
+    @app_commands.command(name="playlist", description="Tampilkan dan pilih playlist server untuk diputar")
+    async def playlist(self, interaction: discord.Interaction):
+        """Show saved playlists for this guild and allow user to choose one to play."""
+        playlists = await self.playlists.get_playlists(interaction.guild.id)
+        if not playlists:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.info(
+                    "📂 Playlist Kosong",
+                    "Belum ada playlist yang disimpan untuk server ini.\n"
+                    "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        # Build summary embed
+        total = len(playlists)
+        lines = []
+        for idx, pl in enumerate(playlists[:25], start=1):
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            lines.append(f"`{idx}.` **{name}** — {track_count} lagu")
+
+        more_note = ""
+        if total > 25:
+            more_note = f"\n\nMenampilkan 25 dari total **{total}** playlist."
+
+        embed = discord.Embed(
+            title="📂 Playlist Server",
+            description="\n".join(lines) + more_note,
+            color=discord.Color.from_rgb(138, 43, 226),
+        )
+        embed.set_footer(text="Pilih playlist dari menu di bawah untuk diputar.")
+
+        view = PlaylistSelectView(self, interaction.guild, interaction.user, playlists)
+        await interaction.response.send_message(embed=embed, view=view)
+
+    # ─────────────────────── /playlistdelete ───────────────────────
+
+    @app_commands.command(name="playlistdelete", description="Hapus playlist yang tersimpan di server")
+    @app_commands.describe(name="Nama playlist persis seperti yang tertulis di daftar")
+    async def playlistdelete(self, interaction: discord.Interaction, name: str):
+        """Delete a stored playlist (anyone can delete)."""
+        deleted = await self.playlists.delete_playlist(interaction.guild.id, name)
+        if not deleted:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error(
+                    "Playlist tidak ditemukan.\n"
+                    "Pastikan nama yang kamu masukkan sama persis dengan yang ada di `/playlist`."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_message(
+            embed=EmbedBuilder.success(
+                "🗑️ Playlist Dihapus",
+                f"Playlist **{name}** telah dihapus dari server ini."
+            )
+        )
+
     # ─────────── /move ───────────
 
     @app_commands.command(name="move", description="Pindahkan lagu di queue ke posisi lain")
@@ -589,6 +657,114 @@ class Music(commands.Cog):
             # Track for auto-delete when song changes
             player = self.get_player(interaction.guild)
             player.lyrics_messages.append(msg)
+
+    # ─────────────────────── Playlist Helpers ───────────────────────
+
+    def _build_playlist_display_name(self, base_name: str, user: discord.abc.User) -> str:
+        """Build stored playlist name with username suffix."""
+        base_name = (base_name or "Playlist").strip()
+        username = getattr(user, "display_name", None) or user.name
+        return f"{base_name} - {username}"
+
+    # ─────────────────────── /playlistcopy ───────────────────────
+
+    @app_commands.command(
+        name="playlistcopy",
+        description="Copy playlist YouTube dan simpan sebagai playlist server"
+    )
+    @app_commands.describe(
+        url="URL playlist YouTube",
+        name="Nama playlist (opsional). Jika kosong pakai nama bawaan."
+    )
+    async def playlistcopy(self, interaction: discord.Interaction, url: str, name: str | None = None):
+        """Copy a YouTube playlist and save it for this server."""
+        await interaction.response.defer()
+
+        # Extract playlist info
+        try:
+            entries, playlist_title = await YTDLSource.get_info(url, loop=self.bot.loop)
+        except Exception as e:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(f"Gagal mengambil playlist: `{e}`")
+            )
+            return
+
+        if not entries:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Playlist kosong atau tidak ditemukan.")
+            )
+            return
+
+        # Determine name
+        base_name = name or playlist_title or "Playlist"
+        stored_name = self._build_playlist_display_name(base_name, interaction.user)
+
+        # Build track list (max 50)
+        tracks_data = []
+        for entry in entries[: PlaylistStore.MAX_TRACKS]:
+            web_url = entry.get("webpage_url")
+            if not web_url:
+                if entry.get("url"):
+                    if len(entry["url"]) == 11:
+                        web_url = f"https://www.youtube.com/watch?v={entry['url']}"
+                    else:
+                        web_url = entry["url"]
+                elif entry.get("id"):
+                    web_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                else:
+                    continue
+
+            tracks_data.append(
+                {
+                    "title": entry.get("title", "Unknown"),
+                    "url": web_url,
+                    "duration": entry.get("duration", 0),
+                    "thumbnail": entry.get("thumbnail", ""),
+                    "uploader": entry.get("uploader", "Unknown"),
+                }
+            )
+
+        if not tracks_data:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Gagal menyalin data lagu dari playlist.")
+            )
+            return
+
+        playlist_payload = {
+            "name": stored_name,
+            "base_name": base_name,
+            "owner_id": interaction.user.id,
+            "owner_name": getattr(interaction.user, "display_name", None) or interaction.user.name,
+            "source_url": url,
+            "track_count": len(tracks_data),
+            "tracks": tracks_data,
+        }
+
+        ok, err = await self.playlists.add_playlist(interaction.guild.id, playlist_payload)
+        if not ok and err == "FULL":
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(
+                    "Daftar playlist untuk server ini sudah penuh (maksimal 100 playlist).\n"
+                    "Hapus beberapa playlist terlebih dahulu dengan `/playlistdelete`."
+                )
+            )
+            return
+
+        # Success
+        note = ""
+        if len(entries) > PlaylistStore.MAX_TRACKS:
+            note = (
+                f"\n⚠️ Playlist asli memiliki {len(entries)} lagu. "
+                f"Hanya **{PlaylistStore.MAX_TRACKS}** lagu pertama yang disimpan."
+            )
+
+        await interaction.followup.send(
+            embed=EmbedBuilder.success(
+                "✅ Playlist Disalin",
+                f"Playlist **{stored_name}** berhasil disimpan untuk server ini.\n"
+                f"Total lagu tersimpan: **{len(tracks_data)}**.{note}"
+            )
+        )
 
     # ─────────────────────── /loop ───────────────────────
 
@@ -759,6 +935,9 @@ class Music(commands.Cog):
         embed.add_field(name="/autoplay", value="Toggle autoplay rekomendasi otomatis", inline=False)
         embed.add_field(name="/lyrics `[query]`", value="Cari lirik lagu (Lrclib/Genius)", inline=False)
         embed.add_field(name="/status", value="Tampilkan status bot musik", inline=False)
+        embed.add_field(name="/playlistcopy `<url> [name]`", value="Salin playlist YouTube dan simpan sebagai playlist server (maks 50 lagu / playlist)", inline=False)
+        embed.add_field(name="/playlist", value="Tampilkan daftar playlist server dan pilih untuk diputar / masuk ke queue", inline=False)
+        embed.add_field(name="/playlistdelete `<name>`", value="Hapus playlist tertentu dari server (bisa digunakan siapa saja)", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
         embed.set_footer(text="Omnia Music 🎶")
         await interaction.response.send_message(embed=embed)
@@ -814,6 +993,120 @@ class Music(commands.Cog):
                                     pass
                             await player.disconnect()
                             self.cleanup_player(member.guild.id)
+
+
+class PlaylistSelectView(discord.ui.View):
+    """Interactive select menu for choosing a saved playlist."""
+
+    def __init__(self, music_cog: "Music", guild: discord.Guild, user: discord.Member, playlists: list[dict]):
+        super().__init__(timeout=60)
+        self.music_cog = music_cog
+        self.guild = guild
+        self.user = user
+        # Limit to 25 options for Discord select
+        self._playlists = playlists[:25]
+
+        options = []
+        for idx, pl in enumerate(self._playlists):
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            label = name if len(name) <= 90 else name[:87] + "..."
+            description = f"{track_count} lagu"
+            options.append(discord.SelectOption(label=label, value=str(idx), description=description))
+
+        select = discord.ui.Select(
+            placeholder="Pilih playlist untuk diputar...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        select.callback = self._on_select  # type: ignore
+        self.add_item(select)
+
+    async def _on_select(self, interaction: discord.Interaction):
+        """Handle playlist selection."""
+        # Only allow interaction in same guild
+        if interaction.guild != self.guild:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Playlist ini tidak berlaku di server lain."),
+                ephemeral=True,
+            )
+            return
+
+        # Ensure user is in voice & same channel as bot
+        music: Music = self.music_cog
+        if not await music._ensure_voice(interaction):
+            return
+        if not await music._ensure_same_channel(interaction):
+            return
+
+        await interaction.response.defer()
+
+        select: discord.ui.Select = interaction.data["component"]  # type: ignore
+        # Fallback: try to fetch from view items if direct access fails
+        if isinstance(select, discord.ui.Select) and select.values:
+            idx_str = select.values[0]
+        else:
+            values = interaction.data.get("values") if isinstance(interaction.data, dict) else None  # type: ignore
+            idx_str = values[0] if values else "0"
+
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            idx = 0
+
+        if not (0 <= idx < len(self._playlists)):
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Playlist yang dipilih tidak valid."),
+                ephemeral=True,
+            )
+            return
+
+        playlist = self._playlists[idx]
+        tracks_data = playlist.get("tracks") or []
+        if not tracks_data:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Playlist ini tidak memiliki lagu tersimpan."),
+                ephemeral=True,
+            )
+            return
+
+        player = music.get_player(self.guild)
+        player.text_channel = interaction.channel  # type: ignore[assignment]
+
+        # Connect to voice
+        try:
+            await player.connect(interaction.user.voice.channel)  # type: ignore[union-attr]
+        except Exception as e:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(f"Gagal join voice channel: `{e}`"),
+                ephemeral=True,
+            )
+            return
+
+        # Add tracks to queue
+        for t in tracks_data:
+            track = Track(
+                source_url="",
+                title=t.get("title", "Unknown"),
+                url=t.get("url", ""),
+                duration=t.get("duration", 0),
+                thumbnail=t.get("thumbnail", ""),
+                uploader=t.get("uploader", "Unknown"),
+                requester=interaction.user,
+            )
+            await player.add_track(track)
+
+        if not player.is_playing and not player.current:
+            await player.play_next()
+
+        await interaction.followup.send(
+            embed=EmbedBuilder.success(
+                "🎶 Playlist Diputar",
+                f"Menambahkan playlist **{playlist.get('name', 'Untitled')}** "
+                f"({len(tracks_data)} lagu) ke queue."
+            )
+        )
 
 
 async def setup(bot: commands.Bot):

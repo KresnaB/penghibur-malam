@@ -89,6 +89,64 @@ class MusicPlayer:
         if vc and vc.is_paused():
             vc.resume()
 
+    async def seek(self, position: int) -> bool:
+        """
+        Seek to a specific position (in seconds) in the current track.
+        Returns True if seek was started, False otherwise.
+        """
+        vc = self.voice_client
+        if not vc or not self.current:
+            return False
+
+        if position < 0:
+            position = 0
+
+        # Clamp to track duration if known
+        if self.current.duration and position >= self.current.duration:
+            # Allow seeking near the end but not past it
+            position = max(self.current.duration - 3, 0)
+
+        # Ensure we have a direct stream URL to feed into ffmpeg
+        source_url = getattr(self.current, "source_url", None)
+        if not source_url:
+            try:
+                data = await YTDLSource.get_stream_data(self.current.url, loop=self.bot.loop)
+                if not data or not data.get("url"):
+                    return False
+                source_url = data["url"]
+                self.current.source_url = source_url
+            except Exception as e:
+                logger.error(f"Seek: failed to resolve stream URL: {e}")
+                return False
+
+        # Prepare new source starting from the requested position
+        ffmpeg_before = (
+            f"-ss {int(position)} "
+            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        )
+
+        def after_play(error):
+            if error:
+                logger.error(f"Player error after seek: {error}")
+            asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
+
+        try:
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+                await asyncio.sleep(0.3)
+
+            source = discord.FFmpegPCMAudio(
+                source_url,
+                before_options=ffmpeg_before,
+                options="-vn",
+            )
+            source = discord.PCMVolumeTransformer(source, volume=0.5)
+            vc.play(source, after=after_play)
+            return True
+        except Exception as e:
+            logger.error(f"Seek: error while starting playback at {position}s: {e}")
+            return False
+
     async def connect(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
         """Connect to a voice channel."""
         vc = self.voice_client

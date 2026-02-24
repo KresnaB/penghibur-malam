@@ -44,6 +44,49 @@ class Music(commands.Cog):
 
     # ─────────────────────── Helper Checks ───────────────────────
 
+    def _parse_timestamp(self, value: str) -> int | None:
+        """
+        Parse timestamp string into total seconds.
+        Supported formats:
+        - "90" (detik)
+        - "mm:ss"
+        - "hh:mm:ss"
+        """
+        if not value:
+            return None
+
+        value = value.strip()
+
+        # Pure seconds
+        if value.isdigit():
+            return int(value)
+
+        parts = value.split(":")
+        if not (1 <= len(parts) <= 3):
+            return None
+
+        try:
+            parts = [int(p) for p in parts]
+        except ValueError:
+            return None
+
+        # Normalize to [hh, mm, ss]
+        if len(parts) == 3:
+            h, m, s = parts
+        elif len(parts) == 2:
+            h, m, s = 0, parts[0], parts[1]
+        else:  # len == 1
+            h, m, s = 0, 0, parts[0]
+
+        if any(x < 0 for x in (h, m, s)):
+            return None
+
+        # Basic sanity for mm/ss
+        if m >= 60 or s >= 60:
+            return None
+
+        return h * 3600 + m * 60 + s
+
     async def _ensure_voice(self, interaction: discord.Interaction) -> bool:
         """Check that user is in a voice channel. Returns False if not."""
         if not interaction.user.voice or not interaction.user.voice.channel:
@@ -220,6 +263,68 @@ class Music(commands.Cog):
         await player.skip()
         await interaction.response.send_message(
             embed=EmbedBuilder.success("⏭️ Skipped", f"**{current_title}**")
+        )
+
+    # ─────────────────────── /seek ───────────────────────
+
+    @app_commands.command(name="seek", description="Loncat ke timestamp tertentu di lagu yang sedang diputar")
+    @app_commands.describe(
+        timestamp="Timestamp tujuan (detik, mm:ss, atau hh:mm:ss)"
+    )
+    async def seek(self, interaction: discord.Interaction, timestamp: str):
+        """Seek to a specific position in the current track."""
+        if not await self._ensure_voice(interaction):
+            return
+        if not await self._ensure_same_channel(interaction):
+            return
+
+        player = self.get_player(interaction.guild)
+
+        if not player.current or not player.is_playing:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                ephemeral=True
+            )
+            return
+
+        seconds = self._parse_timestamp(timestamp)
+        if seconds is None:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error(
+                    "Format timestamp tidak valid.\n"
+                    "Gunakan salah satu format berikut:\n"
+                    "- `120` (detik)\n"
+                    "- `2:30` (menit:detik)\n"
+                    "- `1:02:30` (jam:menit:detik)"
+                ),
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+
+        success = await player.seek(seconds)
+        if not success:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Gagal melakukan seek ke posisi tersebut."),
+                ephemeral=True
+            )
+            return
+
+        # Bangun teks posisi untuk user
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 0:
+            pos_str = f"{h:02d}:{m:02d}:{s:02d}"
+        else:
+            pos_str = f"{m:02d}:{s:02d}"
+
+        await interaction.followup.send(
+            embed=EmbedBuilder.success(
+                "⏩ Seek",
+                f"Lompat ke posisi **{pos_str}** pada lagu saat ini."
+            )
         )
 
     # ─────────────────────── /stop ───────────────────────
@@ -645,6 +750,7 @@ class Music(commands.Cog):
         )
         embed.add_field(name="/play `<query>`", value="Putar lagu dari YouTube (URL, Playlist, atau pencarian)", inline=False)
         embed.add_field(name="/skip", value="Skip lagu yang sedang diputar", inline=False)
+        embed.add_field(name="/seek `<timestamp>`", value="Loncat ke posisi tertentu di lagu saat ini (detik, mm:ss, atau hh:mm:ss)", inline=False)
         embed.add_field(name="/stop", value="Stop pemutaran dan kosongkan queue", inline=False)
         embed.add_field(name="/queue", value="Tampilkan antrian lagu", inline=False)
         embed.add_field(name="/move `<from> <to>`", value="Pindahkan lagu di queue", inline=False)

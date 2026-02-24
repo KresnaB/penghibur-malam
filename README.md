@@ -8,6 +8,7 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 |---------|-----------|
 | `/play <query>` | Putar lagu (YouTube URL, Playlist, atau keyword) |
 | `/skip` | Skip lagu saat ini |
+| `/seek <timestamp>` | Loncat ke posisi tertentu di lagu saat ini (detik, `mm:ss`, atau `hh:mm:ss`) |
 | `/stop` | Stop dan disconnect |
 | `/queue` | Lihat antrian lagu |
 | `/move <from> <to>` | Pindahkan lagu di queue |

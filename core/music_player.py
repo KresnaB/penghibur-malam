@@ -59,6 +59,7 @@ class MusicPlayer:
         self._next_autoplay: Track | None = None
         self._playing = asyncio.Event()
         self._play_history: list[str] = []  # Track URLs that have been played
+        self._seeking = False  # True while replacing source for seek (ignore after_play from old source)
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -132,6 +133,7 @@ class MusicPlayer:
 
         try:
             if vc.is_playing() or vc.is_paused():
+                self._seeking = True
                 vc.stop()
                 await asyncio.sleep(0.3)
 
@@ -178,6 +180,11 @@ class MusicPlayer:
 
     async def play_next(self):
         """Play the next track in the queue."""
+        # If we're in the middle of a seek, the old source's after_play fired — ignore it
+        if getattr(self, '_seeking', False):
+            self._seeking = False
+            return
+
         self._cancel_idle_timer()
 
         vc = self.voice_client

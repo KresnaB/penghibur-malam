@@ -48,20 +48,20 @@ class NowPlayingView(ui.View):
         self.btn_loop.label = label
         self.btn_loop.style = style
 
-        # Autoplay button
+        # Autoplay button — cycle: Off → YouTube → Custom 1 → Custom 2 → Off
         from core.music_player import AutoplayMode
         self.btn_autoplay.label = ""
         if self.player.autoplay_mode == AutoplayMode.YOUTUBE:
-            self.btn_autoplay.emoji = "🔴"
+            self.btn_autoplay.emoji = "▶️"   # YouTube (play logo)
             self.btn_autoplay.style = discord.ButtonStyle.success
         elif self.player.autoplay_mode == AutoplayMode.CUSTOM:
-            self.btn_autoplay.emoji = "🟣"
+            self.btn_autoplay.emoji = "1️⃣"   # Custom 1
             self.btn_autoplay.style = discord.ButtonStyle.primary
         elif self.player.autoplay_mode == AutoplayMode.CUSTOM2:
-            self.btn_autoplay.emoji = "🟠"
+            self.btn_autoplay.emoji = "2️⃣"   # Custom 2
             self.btn_autoplay.style = discord.ButtonStyle.danger
         else:
-            self.btn_autoplay.emoji = "⚪"
+            self.btn_autoplay.emoji = "🔄"   # Off (circular arrows)
             self.btn_autoplay.style = discord.ButtonStyle.secondary
 
         # Shuffle button
@@ -192,9 +192,9 @@ class NowPlayingView(ui.View):
 
     # ─────────── Autoplay ───────────
 
-    @ui.button(emoji="⚪", label="", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(emoji="🔄", label="", style=discord.ButtonStyle.secondary, row=1)
     async def btn_autoplay(self, interaction: discord.Interaction, button: ui.Button):
-        """Cycle autoplay: Off -> YouTube -> Custom -> Custom 2 -> Off."""
+        """Cycle autoplay: Off → YouTube → Custom 1 → Custom 2 → Off."""
         from core.music_player import AutoplayMode
         
         if self.player.autoplay_mode == AutoplayMode.OFF:

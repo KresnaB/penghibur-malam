@@ -624,10 +624,10 @@ class Music(commands.Cog):
     @app_commands.command(name="autoplay", description="Atur mode autoplay")
     @app_commands.describe(mode="Pilih mode autoplay: off, youtube, custom1, atau custom2")
     @app_commands.choices(mode=[
-        app_commands.Choice(name="🚫 Off", value="off"),
-        app_commands.Choice(name="🔴 YouTube", value="youtube"),
-        app_commands.Choice(name="🟣 Custom 1", value="custom1"),
-        app_commands.Choice(name="🟠 Custom 2", value="custom2"),
+        app_commands.Choice(name="🔄 Off", value="off"),
+        app_commands.Choice(name="▶️ YouTube", value="youtube"),
+        app_commands.Choice(name="1️⃣ Custom 1", value="custom1"),
+        app_commands.Choice(name="2️⃣ Custom 2", value="custom2"),
     ])
     async def autoplay(self, interaction: discord.Interaction, mode: str):
         """Set autoplay mode."""
@@ -640,19 +640,19 @@ class Music(commands.Cog):
         
         if mode == "youtube":
             player.autoplay_mode = AutoplayMode.YOUTUBE
-            status = "YouTube 🔴"
+            status = "YouTube ▶️"
             desc = "Bot akan memutar rekomendasi dasar dari YouTube saat queue kosong."
         elif mode == "custom1":
             player.autoplay_mode = AutoplayMode.CUSTOM
-            status = "Custom 1 🟣"
+            status = "Custom 1 1️⃣"
             desc = "Bot menggunakan smart filtering (Relevan + Eksploratif) saat queue kosong."
         elif mode == "custom2":
             player.autoplay_mode = AutoplayMode.CUSTOM2
-            status = "Custom 2 🟠"
+            status = "Custom 2 2️⃣"
             desc = "Bot menggunakan rekomendasi eksploratif yang prioritasnya mencari artis/genre baru."
         else:
             player.autoplay_mode = AutoplayMode.OFF
-            status = "OFF ⚪"
+            status = "Off 🔄"
             desc = "Autoplay dimatikan."
 
         # Trigger preload check if enabled
@@ -720,14 +720,14 @@ class Music(commands.Cog):
             inline=True
         )
 
-        # Autoplay
-        ap_status = "OFF ⚪"
+        # Autoplay — cycle: Off → YouTube → Custom 1 → Custom 2 → Off
+        ap_status = "Off 🔄"
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
-            ap_status = "YouTube 🔴"
+            ap_status = "YouTube ▶️"
         elif player.autoplay_mode == AutoplayMode.CUSTOM:
-            ap_status = "Custom 1 🟣"
+            ap_status = "Custom 1 1️⃣"
         elif player.autoplay_mode == AutoplayMode.CUSTOM2:
-            ap_status = "Custom 2 🟠"
+            ap_status = "Custom 2 2️⃣"
             
         embed.add_field(
             name="🔄 Autoplay",

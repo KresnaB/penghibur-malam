@@ -18,8 +18,9 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 | `/lyrics [query]` | Cari lirik lagu (Lrclib/Genius) |
 | `/status` | Tampilkan status bot |
 | `/playlistcopy <url> [name]` | Copy playlist YouTube dan simpan sebagai playlist server (maks 50 lagu/playlist) |
-| `/playlist` | Tampilkan daftar playlist server dan pilih dari dropdown untuk diputar / masuk ke queue |
-| `/playlistdelete` | Tampilkan daftar playlist server dalam dropdown dan hapus playlist yang dipilih (bisa digunakan siapa saja) |
+| `/playlist` | Tampilkan daftar playlist server tanpa menu interaktif |
+| `/playlistplay` | Tampilkan daftar playlist server dan pilih dari dropdown untuk diputar / masuk ke queue |
+| `/playlistdelete` | Tampilkan daftar playlist server dalam dropdown dan hapus playlist yang dipilih |
 | `/help` | Tampilkan daftar command |
 
 ### 🔧 Fitur Otomatis
@@ -90,6 +91,8 @@ penghibur-malam/
 │   ├── music_player.py  # Player engine
 │   ├── queue_manager.py # Queue system
 │   └── ytdl_source.py   # yt-dlp wrapper
+├── data/
+│   └── playlists.json   # Pelajari playlist tersimpan (Persisten)
 └── utils/
     ├── embed_builder.py     # Rich embeds
     ├── genius_lyrics.py     # Genius lyrics fetcher

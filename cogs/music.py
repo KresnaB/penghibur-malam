@@ -463,8 +463,8 @@ class Music(commands.Cog):
 
     # ─────────────────────── /playlist ───────────────────────
 
-    @app_commands.command(name="playlist", description="Tampilkan dan pilih playlist server untuk diputar")
-    async def playlist(self, interaction: discord.Interaction):
+    @app_commands.command(name="playlistplay", description="Pilih playlist server untuk diputar")
+    async def playlistplay(self, interaction: discord.Interaction):
         """Show saved playlists for this guild and allow user to choose one to play."""
         playlists = await self.playlists.get_playlists(interaction.guild.id)
         if not playlists:
@@ -481,6 +481,36 @@ class Music(commands.Cog):
         view = PlaylistSelectView(self, interaction.guild, interaction.user, playlists)
         embed = view.build_embed()
         await interaction.response.send_message(embed=embed, view=view)
+
+    @app_commands.command(name="playlist", description="Tampilkan daftar playlist server")
+    async def playlist(self, interaction: discord.Interaction):
+        """Show saved playlists for this guild without the select menu."""
+        playlists = await self.playlists.get_playlists(interaction.guild.id)
+        if not playlists:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.info(
+                    "📂 Playlist Kosong",
+                    "Belum ada playlist yang disimpan untuk server ini.\n"
+                    "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        lines = []
+        for i, pl in enumerate(playlists, start=1):
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
+        
+        # Max description is 4096 chars, 100 playlists should fit.
+        # If not, we can chunk it, but we keep it simple here.
+        embed = discord.Embed(
+            title="📂 Daftar Playlist Server",
+            description="\n".join(lines)[:4096],
+            color=discord.Color.from_rgb(138, 43, 226),
+        )
+        await interaction.response.send_message(embed=embed)
 
     # ─────────────────────── /playlistdelete ───────────────────────
 
@@ -1070,15 +1100,23 @@ class PlaylistSelectView(discord.ui.View):
                 embed=EmbedBuilder.error("Playlist ini tidak berlaku di server lain."),
                 ephemeral=True,
             )
+            try: await interaction.message.delete()
+            except discord.HTTPException: pass
             return
 
         music: Music = self.music_cog
         if not await music._ensure_voice(interaction):
+            try: await interaction.message.delete()
+            except discord.HTTPException: pass
             return
         if not await music._ensure_same_channel(interaction):
+            try: await interaction.message.delete()
+            except discord.HTTPException: pass
             return
 
         await interaction.response.defer()
+        try: await interaction.message.delete()
+        except discord.HTTPException: pass
 
         if not select.values:
             await interaction.followup.send(

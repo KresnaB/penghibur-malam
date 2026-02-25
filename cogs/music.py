@@ -478,51 +478,30 @@ class Music(commands.Cog):
             )
             return
 
-        # Build summary embed
-        total = len(playlists)
-        lines = []
-        for idx, pl in enumerate(playlists[:25], start=1):
-            name = str(pl.get("name", "Untitled"))
-            track_count = len(pl.get("tracks") or [])
-            lines.append(f"`{idx}.` **{name}** — {track_count} lagu")
-
-        more_note = ""
-        if total > 25:
-            more_note = f"\n\nMenampilkan 25 dari total **{total}** playlist."
-
-        embed = discord.Embed(
-            title="📂 Playlist Server",
-            description="\n".join(lines) + more_note,
-            color=discord.Color.from_rgb(138, 43, 226),
-        )
-        embed.set_footer(text="Pilih playlist dari menu di bawah untuk diputar.")
-
         view = PlaylistSelectView(self, interaction.guild, interaction.user, playlists)
+        embed = view.build_embed()
         await interaction.response.send_message(embed=embed, view=view)
 
     # ─────────────────────── /playlistdelete ───────────────────────
 
     @app_commands.command(name="playlistdelete", description="Hapus playlist yang tersimpan di server")
-    @app_commands.describe(name="Nama playlist persis seperti yang tertulis di daftar")
-    async def playlistdelete(self, interaction: discord.Interaction, name: str):
-        """Delete a stored playlist (anyone can delete)."""
-        deleted = await self.playlists.delete_playlist(interaction.guild.id, name)
-        if not deleted:
+    async def playlistdelete(self, interaction: discord.Interaction):
+        """Show a dropdown of playlists for this guild and delete the selected one."""
+        playlists = await self.playlists.get_playlists(interaction.guild.id)
+        if not playlists:
             await interaction.response.send_message(
-                embed=EmbedBuilder.error(
-                    "Playlist tidak ditemukan.\n"
-                    "Pastikan nama yang kamu masukkan sama persis dengan yang ada di `/playlist`."
+                embed=EmbedBuilder.info(
+                    "📂 Playlist Kosong",
+                    "Belum ada playlist yang disimpan untuk server ini.\n"
+                    "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
                 ),
                 ephemeral=True,
             )
             return
 
-        await interaction.response.send_message(
-            embed=EmbedBuilder.success(
-                "🗑️ Playlist Dihapus",
-                f"Playlist **{name}** telah dihapus dari server ini."
-            )
-        )
+        view = PlaylistDeleteView(self, interaction.guild, playlists)
+        embed = view.build_embed()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     # ─────────── /move ───────────
 
@@ -936,8 +915,8 @@ class Music(commands.Cog):
         embed.add_field(name="/lyrics `[query]`", value="Cari lirik lagu (Lrclib/Genius)", inline=False)
         embed.add_field(name="/status", value="Tampilkan status bot musik", inline=False)
         embed.add_field(name="/playlistcopy `<url> [name]`", value="Salin playlist YouTube dan simpan sebagai playlist server (maks 50 lagu / playlist)", inline=False)
-        embed.add_field(name="/playlist", value="Tampilkan daftar playlist server dan pilih untuk diputar / masuk ke queue", inline=False)
-        embed.add_field(name="/playlistdelete `<name>`", value="Hapus playlist tertentu dari server (bisa digunakan siapa saja)", inline=False)
+        embed.add_field(name="/playlist", value="Tampilkan daftar playlist server dan pilih dari dropdown untuk diputar / masuk ke queue", inline=False)
+        embed.add_field(name="/playlistdelete", value="Tampilkan daftar playlist server dalam dropdown dan hapus playlist yang dipilih (bisa digunakan siapa saja)", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
         embed.set_footer(text="Omnia Music 🎶")
         await interaction.response.send_message(embed=embed)
@@ -995,37 +974,97 @@ class Music(commands.Cog):
                             self.cleanup_player(member.guild.id)
 
 
+PAGE_SIZE = 25  # Discord select menu limit
+
+
 class PlaylistSelectView(discord.ui.View):
-    """Interactive select menu for choosing a saved playlist."""
+    """Interactive select menu for choosing a saved playlist, with pagination."""
 
     def __init__(self, music_cog: "Music", guild: discord.Guild, user: discord.Member, playlists: list[dict]):
         super().__init__(timeout=60)
         self.music_cog = music_cog
         self.guild = guild
         self.user = user
-        # Limit to 25 options for Discord select
-        self._playlists = playlists[:25]
+        self._all_playlists = list(playlists)
+        self._current_page = 0
+        self._total_pages = max(1, (len(self._all_playlists) + PAGE_SIZE - 1) // PAGE_SIZE)
 
+        self.playlist_select.options = self._build_options()
+
+        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="◀ Previous", row=1, custom_id="pl_sel_prev")
+        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next ▶", row=1, custom_id="pl_sel_next")
+        prev_btn.callback = self._on_prev
+        next_btn.callback = self._on_next
+        self.add_item(prev_btn)
+        self.add_item(next_btn)
+        self._prev_btn = prev_btn
+        self._next_btn = next_btn
+        self._update_nav_buttons()
+
+    def _build_options(self) -> list[discord.SelectOption]:
+        start = self._current_page * PAGE_SIZE
+        slice_pl = self._all_playlists[start : start + PAGE_SIZE]
         options = []
-        for idx, pl in enumerate(self._playlists):
+        for i, pl in enumerate(slice_pl):
+            global_idx = start + i
             name = str(pl.get("name", "Untitled"))
             track_count = len(pl.get("tracks") or [])
             label = name if len(name) <= 90 else name[:87] + "..."
             description = f"{track_count} lagu"
-            options.append(discord.SelectOption(label=label, value=str(idx), description=description))
+            options.append(discord.SelectOption(label=label, value=str(global_idx), description=description))
+        return options
 
-        select = discord.ui.Select(
-            placeholder="Pilih playlist untuk diputar...",
-            min_values=1,
-            max_values=1,
-            options=options,
+    def _update_nav_buttons(self):
+        if hasattr(self, "_prev_btn"):
+            self._prev_btn.disabled = self._current_page <= 0
+        if hasattr(self, "_next_btn"):
+            self._next_btn.disabled = self._current_page >= self._total_pages - 1
+
+    def build_embed(self) -> discord.Embed:
+        start = self._current_page * PAGE_SIZE
+        slice_pl = self._all_playlists[start : start + PAGE_SIZE]
+        total = len(self._all_playlists)
+        lines = []
+        for i, pl in enumerate(slice_pl, start=start + 1):
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
+        page_note = f"\n\n📄 Halaman **{self._current_page + 1}** / **{self._total_pages}**"
+        if total > PAGE_SIZE:
+            page_note += f" • Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
+        embed = discord.Embed(
+            title="📂 Playlist Server",
+            description="\n".join(lines) + page_note,
+            color=discord.Color.from_rgb(138, 43, 226),
         )
-        select.callback = self._on_select  # type: ignore
-        self.add_item(select)
+        embed.set_footer(text="Pilih playlist dari menu di bawah untuk diputar.")
+        return embed
 
-    async def _on_select(self, interaction: discord.Interaction):
+    async def _on_prev(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = max(0, self._current_page - 1)
+        self.playlist_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _on_next(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = min(self._total_pages - 1, self._current_page + 1)
+        self.playlist_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.select(
+        placeholder="Pilih playlist untuk diputar...",
+        min_values=1,
+        max_values=1,
+        options=[],
+        row=0,
+    )
+    async def playlist_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         """Handle playlist selection."""
-        # Only allow interaction in same guild
         if interaction.guild != self.guild:
             await interaction.response.send_message(
                 embed=EmbedBuilder.error("Playlist ini tidak berlaku di server lain."),
@@ -1033,7 +1072,6 @@ class PlaylistSelectView(discord.ui.View):
             )
             return
 
-        # Ensure user is in voice & same channel as bot
         music: Music = self.music_cog
         if not await music._ensure_voice(interaction):
             return
@@ -1042,27 +1080,26 @@ class PlaylistSelectView(discord.ui.View):
 
         await interaction.response.defer()
 
-        select: discord.ui.Select = interaction.data["component"]  # type: ignore
-        # Fallback: try to fetch from view items if direct access fails
-        if isinstance(select, discord.ui.Select) and select.values:
-            idx_str = select.values[0]
-        else:
-            values = interaction.data.get("values") if isinstance(interaction.data, dict) else None  # type: ignore
-            idx_str = values[0] if values else "0"
+        if not select.values:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Tidak ada playlist yang dipilih."),
+                ephemeral=True,
+            )
+            return
 
         try:
-            idx = int(idx_str)
+            global_idx = int(select.values[0])
         except ValueError:
-            idx = 0
+            global_idx = 0
 
-        if not (0 <= idx < len(self._playlists)):
+        if not (0 <= global_idx < len(self._all_playlists)):
             await interaction.followup.send(
                 embed=EmbedBuilder.error("Playlist yang dipilih tidak valid."),
                 ephemeral=True,
             )
             return
 
-        playlist = self._playlists[idx]
+        playlist = self._all_playlists[global_idx]
         tracks_data = playlist.get("tracks") or []
         if not tracks_data:
             await interaction.followup.send(
@@ -1074,7 +1111,6 @@ class PlaylistSelectView(discord.ui.View):
         player = music.get_player(self.guild)
         player.text_channel = interaction.channel  # type: ignore[assignment]
 
-        # Connect to voice
         try:
             await player.connect(interaction.user.voice.channel)  # type: ignore[union-attr]
         except Exception as e:
@@ -1084,7 +1120,6 @@ class PlaylistSelectView(discord.ui.View):
             )
             return
 
-        # Add tracks to queue
         for t in tracks_data:
             track = Track(
                 source_url="",
@@ -1106,6 +1141,148 @@ class PlaylistSelectView(discord.ui.View):
                 f"Menambahkan playlist **{playlist.get('name', 'Untitled')}** "
                 f"({len(tracks_data)} lagu) ke queue."
             )
+        )
+
+
+class PlaylistDeleteView(discord.ui.View):
+    """Interactive select menu for deleting a saved playlist, with pagination."""
+
+    def __init__(self, music_cog: "Music", guild: discord.Guild, playlists: list[dict]):
+        super().__init__(timeout=60)
+        self.music_cog = music_cog
+        self.guild = guild
+        self._all_playlists = list(playlists)
+        self._current_page = 0
+        self._total_pages = max(1, (len(self._all_playlists) + PAGE_SIZE - 1) // PAGE_SIZE)
+
+        self.playlist_select.options = self._build_options()
+
+        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="◀ Previous", row=1, custom_id="pl_del_prev")
+        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next ▶", row=1, custom_id="pl_del_next")
+        prev_btn.callback = self._on_prev
+        next_btn.callback = self._on_next
+        self.add_item(prev_btn)
+        self.add_item(next_btn)
+        self._prev_btn = prev_btn
+        self._next_btn = next_btn
+        self._update_nav_buttons()
+
+    def _build_options(self) -> list[discord.SelectOption]:
+        start = self._current_page * PAGE_SIZE
+        slice_pl = self._all_playlists[start : start + PAGE_SIZE]
+        options = []
+        for i, pl in enumerate(slice_pl):
+            global_idx = start + i
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            label = name if len(name) <= 90 else name[:87] + "..."
+            description = f"{track_count} lagu"
+            options.append(discord.SelectOption(label=label, value=str(global_idx), description=description))
+        return options
+
+    def _update_nav_buttons(self):
+        if hasattr(self, "_prev_btn"):
+            self._prev_btn.disabled = self._current_page <= 0
+        if hasattr(self, "_next_btn"):
+            self._next_btn.disabled = self._current_page >= self._total_pages - 1
+
+    def build_embed(self) -> discord.Embed:
+        start = self._current_page * PAGE_SIZE
+        slice_pl = self._all_playlists[start : start + PAGE_SIZE]
+        total = len(self._all_playlists)
+        lines = []
+        for i, pl in enumerate(slice_pl, start=start + 1):
+            name = str(pl.get("name", "Untitled"))
+            track_count = len(pl.get("tracks") or [])
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
+        page_note = f"\n\n📄 Halaman **{self._current_page + 1}** / **{self._total_pages}**"
+        if total > PAGE_SIZE:
+            page_note += f" • Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
+        embed = discord.Embed(
+            title="🗑️ Hapus Playlist Server",
+            description="\n".join(lines) + page_note,
+            color=discord.Color.from_rgb(220, 20, 60),
+        )
+        embed.set_footer(text="Pilih playlist yang ingin dihapus dari menu di bawah.")
+        return embed
+
+    async def _on_prev(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = max(0, self._current_page - 1)
+        self.playlist_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _on_next(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = min(self._total_pages - 1, self._current_page + 1)
+        self.playlist_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.select(
+        placeholder="Pilih playlist untuk dihapus...",
+        min_values=1,
+        max_values=1,
+        options=[],
+        row=0,
+    )
+    async def playlist_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle playlist deletion selection."""
+        if interaction.guild != self.guild:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Playlist ini tidak berlaku di server lain."),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if not select.values:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Tidak ada playlist yang dipilih."),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            global_idx = int(select.values[0])
+        except ValueError:
+            global_idx = 0
+
+        if not (0 <= global_idx < len(self._all_playlists)):
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Playlist yang dipilih tidak valid."),
+                ephemeral=True,
+            )
+            return
+
+        playlist = self._all_playlists[global_idx]
+        name = str(playlist.get("name", "Untitled"))
+
+        deleted = await self.music_cog.playlists.delete_playlist(self.guild.id, name)
+        if not deleted:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error(
+                    "Playlist tidak ditemukan atau sudah dihapus.\n"
+                    "Coba buka ulang `/playlistdelete` untuk menyegarkan daftar."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        for child in self.children:
+            if isinstance(child, discord.ui.Select):
+                child.disabled = True
+
+        await interaction.followup.send(
+            embed=EmbedBuilder.success(
+                "🗑️ Playlist Dihapus",
+                f"Playlist **{name}** telah dihapus dari server ini."
+            ),
+            ephemeral=True,
         )
 
 

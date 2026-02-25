@@ -32,7 +32,9 @@ class Music(commands.Cog):
         self.players: dict[int, MusicPlayer] = {}  # guild_id -> MusicPlayer
         # Shared playlist storage (per guild, shared by all users)
         base_path = Path(__file__).resolve().parent.parent
-        self.playlists = PlaylistStore(base_path / "playlists.json")
+        data_path = base_path / "data"
+        data_path.mkdir(exist_ok=True)
+        self.playlists = PlaylistStore(data_path / "playlists.json")
 
     def get_player(self, guild: discord.Guild) -> MusicPlayer:
         """Get or create MusicPlayer for a guild."""

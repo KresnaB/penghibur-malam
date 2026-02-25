@@ -8,6 +8,8 @@ services:
     volumes:
       # Mount file cookies.txt agar bot bisa baca
       - ./cookies.txt:/app/cookies.txt
+      # Persist data (termasuk playlists.json)
+      - ./data:/app/data
       # (Opsional) Persist log jika perlu
       # - ./logs:/app/logs
     env_file:

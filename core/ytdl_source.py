@@ -51,6 +51,8 @@ YTDL_FORMAT_OPTIONS = {
         'youtubepot-bgutilhttp': ['base_url=http://pot-provider:4416']
     },
     'cachedir': False,
+    # Fresh cookies from Firefox for YouTube authentication
+    'cookiefile': 'cookies.txt',
 }
 
 FFMPEG_OPTIONS = {

@@ -43,13 +43,14 @@ YTDL_FORMAT_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
-    # PO Token Provider to bypass bot detection
+    # Enable Node.js as JS runtime (yt-dlp only enables deno by default)
+    'js_runtimes': {'node': {}, 'deno': {}},
+    # Use mweb client (supports PO Token) + PO Token Provider server
     'extractor_args': {
+        'youtube': ['player_client=mweb'],
         'youtubepot-bgutilhttp': ['base_url=http://pot-provider:4416']
     },
     'cachedir': False,
-    # Disabling cookies.txt temporarily to check if the current cookie is banned
-    # 'cookiefile': 'cookies.txt',
 }
 
 FFMPEG_OPTIONS = {

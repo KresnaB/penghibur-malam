@@ -11,6 +11,25 @@ import yt_dlp
 
 logger = logging.getLogger('omnia.ytdl')
 
+# --- Startup diagnostic: check if PO Token plugin is installed ---
+def _check_pot_plugin():
+    """Check if bgutil-ytdlp-pot-provider plugin is installed and reachable."""
+    try:
+        import bgutil_ytdlp_pot_provider
+        logger.info(f"✅ PO Token plugin loaded: bgutil-ytdlp-pot-provider")
+    except ImportError:
+        logger.warning("❌ PO Token plugin NOT installed: bgutil-ytdlp-pot-provider")
+
+    # Check if pot-provider server is reachable
+    import urllib.request
+    try:
+        req = urllib.request.urlopen('http://pot-provider:4416', timeout=3)
+        logger.info(f"✅ PO Token server reachable at pot-provider:4416 (status {req.status})")
+    except Exception as e:
+        logger.warning(f"⚠️ PO Token server NOT reachable at pot-provider:4416: {e}")
+
+_check_pot_plugin()
+
 # yt-dlp configuration
 YTDL_FORMAT_OPTIONS = {
     'format': 'bestaudio/bestaudio*/best/best*',
@@ -18,8 +37,9 @@ YTDL_FORMAT_OPTIONS = {
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
+    'quiet': False,
+    'no_warnings': False,
+    'verbose': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,

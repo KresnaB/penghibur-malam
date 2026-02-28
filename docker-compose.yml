@@ -16,3 +16,12 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    depends_on:
+      - pot-provider
+
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider
+    container_name: pot_provider
+    restart: unless-stopped
+    ports:
+      - "4416:4416"

@@ -28,8 +28,8 @@ YTDL_FORMAT_OPTIONS = {
         'youtube': ['player_client=android,web', 'player_skip=webpage']
     },
     'cachedir': False,
-    # Anti-blocking: Use cookies.txt if available
-    'cookiefile': 'cookies.txt',
+    # Disabling cookies.txt temporarily to check if the current cookie is banned
+    # 'cookiefile': 'cookies.txt',
 }
 
 FFMPEG_OPTIONS = {

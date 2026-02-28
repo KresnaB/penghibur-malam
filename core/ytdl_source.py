@@ -13,7 +13,7 @@ logger = logging.getLogger('omnia.ytdl')
 
 # yt-dlp configuration
 YTDL_FORMAT_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio/bestaudio*/best/best*',
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
@@ -23,14 +23,13 @@ YTDL_FORMAT_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
+    # Use Android client to bypass bot detection on Web client
+    'extractor_args': {
+        'youtube': ['player_client=android,web', 'player_skip=webpage']
+    },
     'cachedir': False,
     # Anti-blocking: Use cookies.txt if available
     'cookiefile': 'cookies.txt',
-    # Spoof User-Agent
-    'http_headers': {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.youtube.com/',
-    }
 }
 
 FFMPEG_OPTIONS = {

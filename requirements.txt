@@ -3,3 +3,6 @@ git+https://github.com/yt-dlp/yt-dlp.git@master
 python-dotenv
 PyNaCl
 lyricsgenius
+
+# Install PO Token generator plugin for yt-dlp
+bgutil-ytdlp-pot-provider

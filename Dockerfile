@@ -1,9 +1,11 @@
 # Gunakan Python 3.11-slim (ringan & modern)
 FROM python:3.11-slim
 
-# Install dependencies sistem (ffmpeg & git)
+# Install dependencies sistem (ffmpeg, git, nodejs for PO Token generator)
 RUN apt-get update && \
-    apt-get install -y ffmpeg git && \
+    apt-get install -y ffmpeg git curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory

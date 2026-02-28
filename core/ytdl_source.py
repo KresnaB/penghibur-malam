@@ -23,9 +23,8 @@ YTDL_FORMAT_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'extract_flat': False,
-    # Use Android client and PO Token Provider to bypass bot detection
+    # PO Token Provider to bypass bot detection
     'extractor_args': {
-        'youtube': ['player_client=android,web', 'player_skip=webpage'],
         'youtubepot-bgutilhttp': ['base_url=http://pot-provider:4416']
     },
     'cachedir': False,

@@ -967,12 +967,14 @@ class Music(commands.Cog):
                 # Bot joined/reconnected
                 player = self.get_player(member.guild)
                 # If queue has items but not playing, resume
-                if player.queue.size > 0 and not player.is_playing and not player.is_paused:
-                     logger.info("Bot reconnected. Resuming queue...")
-                     try:
-                        await player.play_next()
-                     except Exception as e:
-                        logger.error(f"Failed to resume on reconnect: {e}")
+                # NOTE: Disabled play_next here because it conflicts with the initial connection handshake
+                # which also triggers this event before vc.is_connected() is True.
+                # if player.queue.size > 0 and not player.is_playing and not player.is_paused:
+                #      logger.info("Bot reconnected. Resuming queue...")
+                #      try:
+                #         await player.play_next()
+                #      except Exception as e:
+                #         logger.error(f"Failed to resume on reconnect: {e}")
             return
 
         # 2. Auto Disconnect Logic (ignore bots)

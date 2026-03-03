@@ -1,0 +1,21 @@
+2026-03-03 17:36:54 | omnia.ytdl                | WARNING  | \u274c PO Token plugin NOT installed: bgutil-ytdlp-pot-provider
+2026-03-03 17:36:55 | omnia.ytdl                | WARNING  | \u26a0\ufe0f PO Token server NOT reachable at pot-provider:4416: <urlopen error [Errno 11001] getaddrinfo failed>
+2026-03-03 17:36:55 | omnia.music               | INFO     | Music cog loaded
+2026-03-03 17:36:55 | omnia                     | INFO     | \U0001f4e6 Loaded cog: cogs.music
+2026-03-03 17:36:55 | discord.client            | INFO     | logging in using static token
+2026-03-03 17:36:57 | discord.gateway           | INFO     | Shard ID None has connected to Gateway (Session ID: c07e23c1e6685a020905a6d230947579).
+2026-03-03 17:36:59 | omnia                     | INFO     | \u2705 Bot Omnia Music sudah online!
+2026-03-03 17:36:59 | omnia                     | INFO     | \U0001f194 Bot ID: 1471479952166752370
+2026-03-03 17:36:59 | omnia                     | INFO     | \U0001f310 Servers: 1
+2026-03-03 17:36:59 | omnia                     | INFO     | -----------------------------------
+2026-03-03 17:36:59 | omnia                     | INFO     | \u26a1 Synced 17 slash commands
+2026-03-03 17:38:25 | omnia.music               | INFO     | cmd:play START query='ada titik titik' user=317867079455866880
+2026-03-03 17:38:26 | discord.voice_state       | INFO     | Connecting to voice...
+2026-03-03 17:38:26 | discord.voice_state       | INFO     | Starting voice handshake... (connection attempt 1)
+2026-03-03 17:38:26 | discord.voice_state       | INFO     | Voice handshake complete. Endpoint found: c-cgk07-665b7f14.discord.media:2083
+2026-03-03 17:38:27 | discord.voice_state       | INFO     | Voice connection complete.
+2026-03-03 17:38:27 | omnia.music               | INFO     | cmd:play CONNECTED took 1.34s
+2026-03-03 17:38:28 | omnia.music               | INFO     | cmd:play EXTRACTED took 1.03s. Entries: 1
+2026-03-03 17:38:28 | omnia.music               | INFO     | First entry URL check: Is stream? False
+2026-03-03 17:38:28 | omnia.music               | INFO     | cmd:play Detected Webpage URL in source_url, clearing for lazy load.
+2026-03-03 17:38:28 | omnia.music               | INFO     | cmd:play PROCESSED took 0.00s

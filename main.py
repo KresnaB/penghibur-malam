@@ -21,8 +21,8 @@ logging.basicConfig(
 logger = logging.getLogger('omnia')
 
 # Reduce noise from discord.py and yt-dlp
-logging.getLogger('discord').setLevel(logging.WARNING)
-logging.getLogger('discord.http').setLevel(logging.WARNING)
+logging.getLogger('discord').setLevel(logging.INFO)
+logging.getLogger('discord.http').setLevel(logging.INFO)
 
 # ─────────────────────── Environment ───────────────────────
 
@@ -38,8 +38,8 @@ if not TOKEN:
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.voice_states = True
 intents.members = True
+intents.voice_states = True
 
 bot = commands.Bot(
     command_prefix='!',

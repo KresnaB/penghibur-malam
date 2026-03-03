@@ -1,9 +1,9 @@
 # Gunakan Python 3.11-slim (ringan & modern)
 FROM python:3.11-slim
 
-# Install dependencies sistem (ffmpeg, git, nodejs for PO Token generator)
+# Install dependencies sistem (ffmpeg, git, nodejs, build-essential for C-extensions)
 RUN apt-get update && \
-    apt-get install -y ffmpeg git curl && \
+    apt-get install -y ffmpeg git curl build-essential libffi-dev python3-dev && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/* && \
@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.gi
 
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Force reinstall voice libraries to ensure DAVE protocol support (NaCl extensions)
+RUN pip install --no-cache-dir --force-reinstall discord.py[voice] PyNaCl
 
 # Install PO Token plugin explicitly and verify
 RUN pip install --no-cache-dir --force-reinstall bgutil-ytdlp-pot-provider && \

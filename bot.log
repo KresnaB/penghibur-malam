@@ -19,3 +19,10 @@
 2026-03-03 17:38:28 | omnia.music               | INFO     | First entry URL check: Is stream? False
 2026-03-03 17:38:28 | omnia.music               | INFO     | cmd:play Detected Webpage URL in source_url, clearing for lazy load.
 2026-03-03 17:38:28 | omnia.music               | INFO     | cmd:play PROCESSED took 0.00s
+2026-03-03 17:40:25 | discord.voice_state       | INFO     | The voice handshake is being terminated for Channel ID 1218873875165872211 (Guild ID 1218873874725474324)
+2026-03-03 17:40:25 | discord.player            | INFO     | ffmpeg process 7588 has not terminated. Waiting to terminate...
+2026-03-03 17:40:25 | omnia.player              | WARNING  | Voice client is disconnected in play_next(). Attempting reconnect...
+2026-03-03 17:40:25 | discord.player            | INFO     | ffmpeg process 7588 should have terminated with a return code of 1.
+2026-03-03 17:40:27 | omnia.player              | INFO     | Successfully reconnected to voice channel.
+2026-03-03 17:40:27 | omnia.player              | ERROR    | Reconnect failed. Stopping playback.
+2026-03-03 17:40:42 | omnia                     | INFO     | \U0001f6d1 Bot dihentikan oleh user.

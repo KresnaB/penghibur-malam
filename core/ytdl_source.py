@@ -4,12 +4,17 @@ Handles YouTube URL extraction and keyword search.
 """
 
 import asyncio
-import re
+import copy
 import logging
+import os
+import re
+import shutil
+
 import discord
 import yt_dlp
 
 logger = logging.getLogger('omnia.ytdl')
+POT_PROVIDER_URL = os.getenv('POT_PROVIDER_URL', 'http://pot-provider:4416')
 
 # --- Startup diagnostic: check if PO Token plugin is installed ---
 def _check_pot_plugin():
@@ -21,17 +26,24 @@ def _check_pot_plugin():
         logger.warning("❌ PO Token plugin NOT installed: bgutil-ytdlp-pot-provider")
 
     # Check if pot-provider server is reachable
+    node_path = shutil.which('node')
+    if node_path:
+        logger.info(f"Node.js runtime detected at: {node_path}")
+    else:
+        logger.warning("Node.js runtime not found in PATH; yt-dlp JS extraction may degrade.")
+
     import urllib.request
     try:
-        req = urllib.request.urlopen('http://pot-provider:4416', timeout=3)
+        req = urllib.request.urlopen(POT_PROVIDER_URL, timeout=3)
         logger.info(f"✅ PO Token server reachable at pot-provider:4416 (status {req.status})")
     except Exception as e:
         logger.warning(f"⚠️ PO Token server NOT reachable at pot-provider:4416: {e}")
 
 _check_pot_plugin()
+logger.info(f"Using PO Token provider base URL: {POT_PROVIDER_URL}")
 
 # yt-dlp configuration
-YTDL_FORMAT_OPTIONS = {
+BASE_YTDL_FORMAT_OPTIONS = {
     'format': 'bestaudio/bestaudio*/best/best*',
     'noplaylist': True,
     'nocheckcertificate': True,
@@ -42,23 +54,45 @@ YTDL_FORMAT_OPTIONS = {
     'verbose': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
+    'socket_timeout': 20,
+    'retries': 3,
+    'extractor_retries': 3,
     'extract_flat': False,
     # Enable Node.js as JS runtime (yt-dlp only enables deno by default)
     'js_runtimes': {'node': {}, 'deno': {}},
     # Use mweb client (supports PO Token) + PO Token Provider server
     'extractor_args': {
         'youtube': ['player_client=mweb'],
-        'youtubepot-bgutilhttp': ['base_url=http://pot-provider:4416']
+        'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,
 }
+
+
+def build_ytdl_options(**overrides):
+    """Build yt-dlp options while preserving PO Token provider settings."""
+    opts = copy.deepcopy(BASE_YTDL_FORMAT_OPTIONS)
+    opts.update(overrides)
+    return opts
 
 FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -analyzeduration 0 -probesize 32',
     'options': '-vn',
 }
 
-ytdl = yt_dlp.YoutubeDL(YTDL_FORMAT_OPTIONS)
+ytdl = yt_dlp.YoutubeDL(build_ytdl_options())
+
+
+def _is_drm_error(error: Exception) -> bool:
+    """Return True when yt-dlp indicates the target media is DRM-protected."""
+    message = str(error).lower()
+    return '[drm]' in message or 'drm protection' in message
+
+
+def _extract_youtube_video_id(value: str) -> str | None:
+    """Extract a YouTube video id from a URL or return None."""
+    match = re.search(r'(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})', value or '')
+    return match.group(1) if match else None
 
 
 class Track:
@@ -101,6 +135,95 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.uploader = data.get('uploader', 'Unknown')
 
     @classmethod
+    async def _fetch_oembed_title(cls, video_url: str, *, loop: asyncio.AbstractEventLoop = None) -> str | None:
+        """Fetch a YouTube title via oEmbed to build a fallback search query."""
+        loop = loop or asyncio.get_event_loop()
+
+        def _request_title():
+            import json
+            import urllib.parse
+            import urllib.request
+
+            endpoint = (
+                "https://www.youtube.com/oembed?url="
+                f"{urllib.parse.quote(video_url, safe='')}&format=json"
+            )
+            with urllib.request.urlopen(endpoint, timeout=10) as response:
+                payload = json.load(response)
+            return payload.get('title')
+
+        try:
+            return await loop.run_in_executor(None, _request_title)
+        except Exception as e:
+            logger.warning(f"Failed to fetch oEmbed title for DRM fallback: {e}")
+            return None
+
+    @classmethod
+    async def _find_non_drm_alternative(
+        cls,
+        *,
+        video_url: str,
+        loop: asyncio.AbstractEventLoop = None,
+        title_hint: str = "",
+        uploader_hint: str = "",
+    ) -> dict | None:
+        """Search for a non-DRM alternative when the requested video cannot be played."""
+        loop = loop or asyncio.get_event_loop()
+
+        search_terms = []
+        if title_hint:
+            if uploader_hint and uploader_hint.lower() not in title_hint.lower():
+                search_terms.append(f"{title_hint} {uploader_hint}")
+            search_terms.append(title_hint)
+
+        oembed_title = await cls._fetch_oembed_title(video_url, loop=loop)
+        if oembed_title and oembed_title not in search_terms:
+            search_terms.append(oembed_title)
+
+        if not search_terms:
+            video_id = _extract_youtube_video_id(video_url)
+            if video_id:
+                search_terms.append(video_id)
+
+        original_id = _extract_youtube_video_id(video_url)
+        for term in search_terms:
+            query = f"ytsearch5:{term} audio"
+            opts = build_ytdl_options(noplaylist=True, extract_flat='in_playlist')
+            ydl_search = yt_dlp.YoutubeDL(opts)
+            try:
+                logger.warning(f'DRM fallback: searching alternative for "{term}"')
+                data = await loop.run_in_executor(
+                    None, lambda: ydl_search.extract_info(query, download=False)
+                )
+            except Exception as e:
+                logger.warning(f"DRM fallback search failed for '{term}': {e}")
+                continue
+
+            entries = data.get('entries') if isinstance(data, dict) else None
+            if not entries:
+                continue
+
+            for entry in entries:
+                if not entry:
+                    continue
+                entry_id = entry.get('id')
+                if original_id and entry_id == original_id:
+                    continue
+                alt_url = entry.get('webpage_url')
+                if not alt_url:
+                    if entry.get('url') and str(entry.get('url', '')).startswith('http'):
+                        alt_url = entry['url']
+                    elif entry_id:
+                        alt_url = f"https://www.youtube.com/watch?v={entry_id}"
+                if not alt_url:
+                    continue
+                entry['webpage_url'] = alt_url
+                logger.warning(f"DRM fallback selected alternative: {entry.get('title', alt_url)}")
+                return entry
+
+        return None
+
+    @classmethod
     async def get_info(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
         """
         Extract track info without downloading audio.
@@ -115,8 +238,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             query = f'ytsearch1:{query}'
 
         # Options: allow playlist, extract flat for speed
-        opts = YTDL_FORMAT_OPTIONS.copy()
-        opts['noplaylist'] = False
+        opts = build_ytdl_options(noplaylist=False)
 
         # Detect YouTube Radio/Mix URLs (list=RD...) — treat as single song
         is_radio = not is_search and 'list=RD' in query
@@ -147,6 +269,13 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 break
             except Exception as e:
                 last_error = e
+                if _is_drm_error(e) and not is_search:
+                    logger.warning(f"DRM detected during get_info for {query}. Trying alternative search.")
+                    alternative = await cls._find_non_drm_alternative(video_url=query, loop=loop)
+                    if alternative:
+                        data = {'entries': [alternative]}
+                        is_search = True
+                        break
                 # Check for common network errors
                 error_str = str(e).lower()
                 network_errors = [
@@ -221,7 +350,14 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
 
     @classmethod
-    async def get_stream_data(cls, query: str, *, loop: asyncio.AbstractEventLoop = None) -> dict:
+    async def get_stream_data(
+        cls,
+        query: str,
+        *,
+        loop: asyncio.AbstractEventLoop = None,
+        title_hint: str = "",
+        uploader_hint: str = "",
+    ) -> dict:
         """
         Extract stream data (audio URL) for a specific video.
         Used for pre-fetching or playback.
@@ -239,6 +375,22 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 break
             except Exception as e:
                 last_error = e
+                if _is_drm_error(e):
+                    logger.warning(f"DRM detected during stream extraction for {query}. Trying alternative search.")
+                    alternative = await cls._find_non_drm_alternative(
+                        video_url=query,
+                        loop=loop,
+                        title_hint=title_hint,
+                        uploader_hint=uploader_hint,
+                    )
+                    if alternative:
+                        alt_url = alternative.get('webpage_url') or alternative.get('url')
+                        if not alt_url:
+                            continue
+                        data = await loop.run_in_executor(
+                            None, lambda: ytdl.extract_info(alt_url, download=False)
+                        )
+                        break
                 # Check for common network errors
                 error_str = str(e).lower()
                 network_errors = [
@@ -261,11 +413,23 @@ class YTDLSource(discord.PCMVolumeTransformer):
         return data
 
     @classmethod
-    async def from_url(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+    async def from_url(
+        cls,
+        query: str,
+        *,
+        loop: asyncio.AbstractEventLoop = None,
+        title_hint: str = "",
+        uploader_hint: str = "",
+    ):
         """
         Create audio source from a SPECIFIC URL (used by player).
         """
-        data = await cls.get_stream_data(query, loop=loop)
+        data = await cls.get_stream_data(
+            query,
+            loop=loop,
+            title_hint=title_hint,
+            uploader_hint=uploader_hint,
+        )
 
         source_url = data.get('url')
         if not source_url:
@@ -300,13 +464,12 @@ class YTDLSource(discord.PCMVolumeTransformer):
 
             if video_id:
                 mix_url = f"https://www.youtube.com/watch?v={video_id}&list=RD{video_id}"
-                mix_opts = {
-                    **YTDL_FORMAT_OPTIONS,
-                    'noplaylist': False,  # Allow playlist extraction
-                    'extract_flat': 'in_playlist',
-                    'playlist_items': '2-6',  # Skip first (current song)
-                    'quiet': True,
-                }
+                mix_opts = build_ytdl_options(
+                    noplaylist=False,  # Allow playlist extraction
+                    extract_flat='in_playlist',
+                    playlist_items='2-6',  # Skip first (current song)
+                    quiet=True,
+                )
                 ydl_mix = yt_dlp.YoutubeDL(mix_opts)
                 mix_data = await loop.run_in_executor(
                     None, lambda: ydl_mix.extract_info(mix_url, download=False)
@@ -332,7 +495,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             search_query = re.sub(r'\(.*?\)|\[.*?\]', '', search_query).strip()
             search_query = f"ytsearch5:{search_query} music"
 
-            search_opts = {**YTDL_FORMAT_OPTIONS, 'extract_flat': True}
+            search_opts = build_ytdl_options(extract_flat=True)
             ydl_search = yt_dlp.YoutubeDL(search_opts)
             search_data = await loop.run_in_executor(
                 None, lambda: ydl_search.extract_info(search_query, download=False)

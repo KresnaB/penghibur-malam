@@ -241,8 +241,11 @@ class Music(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
 
-        # Start playback if idle
-        if not player.is_playing and not player.current:
+        # Start playback whenever the player is idle. Clear stale current state
+        # left behind by unexpected voice disconnects before starting again.
+        if not player.is_playing:
+            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
+                player.current = None
             await player.play_next()
 
 
@@ -1175,7 +1178,9 @@ class PlaylistSelectView(discord.ui.View):
             )
             await player.add_track(track)
 
-        if not player.is_playing and not player.current:
+        if not player.is_playing:
+            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
+                player.current = None
             await player.play_next()
 
         await interaction.followup.send(

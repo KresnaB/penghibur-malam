@@ -153,6 +153,12 @@ class MusicPlayer:
         """Connect to a voice channel."""
         vc = self.voice_client
         if vc:
+            if not vc.is_connected():
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
+                return await channel.connect(self_deaf=True)
             if vc.channel.id != channel.id:
                 await vc.move_to(channel)
             return vc
@@ -204,12 +210,24 @@ class MusicPlayer:
                      vc = self.voice_client
                      if not vc or not vc.is_connected():
                          logger.error("Reconnect failed. Stopping playback.")
+                         self.current = None
+                         self._cancel_preload()
+                         self._next_autoplay = None
+                         self._start_idle_timer()
                          return
                 except Exception as e:
                      logger.error(f"Failed to auto-reconnect: {e}")
+                     self.current = None
+                     self._cancel_preload()
+                     self._next_autoplay = None
+                     self._start_idle_timer()
                      return
             else:
                 logger.warning("No voice channel found to reconnect to. Stopping playback.")
+                self.current = None
+                self._cancel_preload()
+                self._next_autoplay = None
+                self._start_idle_timer()
                 return
 
         # Handle loop modes
@@ -290,7 +308,10 @@ class MusicPlayer:
                 source = discord.PCMVolumeTransformer(source, volume=0.5)
             else:
                 source, _ = await YTDLSource.from_url(
-                    next_track.url, loop=self.bot.loop
+                    next_track.url,
+                    loop=self.bot.loop,
+                    title_hint=next_track.title,
+                    uploader_hint=next_track.uploader,
                 )
 
             def after_play(error):

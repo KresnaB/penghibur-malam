@@ -282,9 +282,11 @@ class MusicPlayer:
 
     def _cancel_progress_updater(self):
         """Stop the periodic now playing progress updater."""
-        if self._progress_task and not self._progress_task.done():
-            self._progress_task.cancel()
-        self._progress_task = None
+        if self._progress_task:
+            if not self._progress_task.done():
+                self._progress_task.cancel()
+            # Drop the reference either way so completed tasks can be collected.
+            self._progress_task = None
 
     def _start_progress_updater(self):
         """Start the periodic progress updater for the now playing message."""
@@ -859,8 +861,9 @@ class MusicPlayer:
 
     def _cancel_idle_timer(self):
         """Cancel idle disconnect timer."""
-        if self._idle_task and not self._idle_task.done():
-            self._idle_task.cancel()
+        if self._idle_task:
+            if not self._idle_task.done():
+                self._idle_task.cancel()
             self._idle_task = None
 
     async def _idle_disconnect(self):
@@ -902,8 +905,9 @@ class MusicPlayer:
 
     def _cancel_preload(self):
         """Cancel existing preload task."""
-        if self._preload_task and not self._preload_task.done():
-            self._preload_task.cancel()
+        if self._preload_task:
+            if not self._preload_task.done():
+                self._preload_task.cancel()
             self._preload_task = None
 
     async def _preload_next_track(self):

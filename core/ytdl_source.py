@@ -80,9 +80,6 @@ FFMPEG_OPTIONS = {
     'options': '-vn',
 }
 
-ytdl = yt_dlp.YoutubeDL(build_ytdl_options())
-
-
 def _is_drm_error(error: Exception) -> bool:
     """Return True when yt-dlp indicates the target media is DRM-protected."""
     message = str(error).lower()
@@ -363,6 +360,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
         Used for pre-fetching or playback.
         """
         loop = loop or asyncio.get_event_loop()
+        # Create a fresh instance per extraction so yt-dlp state is not shared
+        # across concurrent playback, preload, and seek operations.
+        ytdl = yt_dlp.YoutubeDL(build_ytdl_options())
 
         # Retry logic for extraction
         data = None

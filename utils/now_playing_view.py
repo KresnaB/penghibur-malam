@@ -14,6 +14,8 @@ from utils.lyrics_service import get_lyrics_concurrently
 class NowPlayingView(ui.View):
     """Interactive buttons attached to the Now Playing embed."""
 
+    MAX_TRACKED_LYRICS_MESSAGES = 20
+
     def __init__(self, player):
         super().__init__(timeout=None)  # Buttons stay active
         self.player = player
@@ -306,6 +308,12 @@ class NowPlayingView(ui.View):
 
                 msg = await interaction.followup.send(embed=embed, wait=True)
                 self.player.lyrics_messages.append(msg)
+                if len(self.player.lyrics_messages) > self.MAX_TRACKED_LYRICS_MESSAGES:
+                    old_msg = self.player.lyrics_messages.pop(0)
+                    try:
+                        await old_msg.delete()
+                    except Exception:
+                        pass
 
         except Exception as e:
             print(f"Lyrics button error: {e}")

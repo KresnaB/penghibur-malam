@@ -83,6 +83,19 @@ Jika bot tidak bisa memutar lagu karena diblokir YouTube (seperti IP terkena *ba
 3. Letakkan file ini **tepat di *root* folder bot** (sejajar dengan file `main.py` dan `run_bot.bat`).
 4. yt-dlp akan otomatis mendeteksi file `cookies.txt` ini dan menggunakannya untuk menembus *error auth* tanpa perlu modifikasi *source code* lagi.
 
+## 🧠 Debug Memori
+Kalau RAM naik perlahan saat musik terus diputar, aktifkan log memori untuk melihat apakah kenaikan datang dari Python heap, jumlah task, atau state player:
+```env
+DEBUG_MEMORY=1
+DEBUG_MEMORY_INTERVAL=600
+```
+
+Saat aktif, bot akan mencatat:
+- RSS proses
+- penggunaan heap Python dari `tracemalloc`
+- jumlah task aktif
+- ukuran queue, pesan lirik tersimpan, dan state per guild
+
 ## 🏗️ Struktur Project
 
 ```

@@ -6,6 +6,7 @@ Handles all user-facing commands and voice state events.
 from __future__ import annotations
 
 import asyncio
+import os
 import logging
 import re
 from pathlib import Path
@@ -17,6 +18,7 @@ from discord.ext import commands
 from core.music_player import MusicPlayer, LoopMode, AutoplayMode
 from core.ytdl_source import Track, YTDLSource
 from utils.embed_builder import EmbedBuilder
+from utils.memory_debug import MemoryMonitor
 from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
 from utils.lyrics_service import get_lyrics_concurrently
@@ -33,6 +35,7 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, MusicPlayer] = {}  # guild_id -> MusicPlayer
+        self._memory_monitor: MemoryMonitor | None = None
         # Shared playlist storage (per guild, shared by all users)
         base_path = Path(__file__).resolve().parent.parent
         data_path = base_path / "data"
@@ -52,6 +55,27 @@ class Music(commands.Cog):
         """Remove player for a guild."""
         if guild_id in self.players:
             del self.players[guild_id]
+
+    async def cog_load(self):
+        """Start optional background services."""
+        if os.getenv("DEBUG_MEMORY", "").strip().lower() in {"1", "true", "yes", "on"}:
+            interval = int(os.getenv("DEBUG_MEMORY_INTERVAL", "600"))
+            self._memory_monitor = MemoryMonitor(
+                bot=self.bot,
+                players_getter=lambda: list(self.players.values()),
+                interval_seconds=interval,
+            )
+            self._memory_monitor.start()
+            logger.info(
+                "Memory debug enabled: interval=%ss",
+                self._memory_monitor.interval_seconds,
+            )
+
+    async def cog_unload(self):
+        """Stop optional background services."""
+        if self._memory_monitor is not None:
+            await self._memory_monitor.stop()
+            self._memory_monitor = None
 
     async def _send_embed(
         self,

@@ -57,6 +57,7 @@ class MusicPlayer:
         self.autoplay_mode: int = AutoplayMode.OFF
         self.text_channel: discord.TextChannel | None = None
         self.now_playing_message: discord.Message | None = None
+        self._now_playing_view = None
         self.lyrics_messages: list[discord.Message] = []  # Track lyrics messages for cleanup
         self._view_factory = None  # Callback to create NowPlayingView
         self._idle_task: asyncio.Task | None = None
@@ -238,6 +239,12 @@ class MusicPlayer:
         self._cancel_idle_timer()
         await self.cancel_sleep_timer()
         self._cancel_progress_updater()
+        if self._now_playing_view:
+            try:
+                self._now_playing_view.stop()
+            except Exception:
+                pass
+            self._now_playing_view = None
         
         # Ensure buttons are removed
         await self._disable_now_playing_buttons()
@@ -251,6 +258,12 @@ class MusicPlayer:
         self._track_started_at = None
         self._track_paused_elapsed = None
         await self.queue.clear()
+        cleanup_callback = getattr(self, "_cleanup_callback", None)
+        if callable(cleanup_callback):
+            try:
+                cleanup_callback(self.guild.id)
+            except Exception:
+                pass
 
     async def cancel_sleep_timer(self):
         """Cancel any scheduled sleep timer."""
@@ -279,6 +292,12 @@ class MusicPlayer:
         if self.current and self.now_playing_message:
             self._progress_task = asyncio.create_task(self._progress_update_loop())
 
+    def _get_now_playing_view(self):
+        """Return the active now playing view, creating it if needed."""
+        if self._now_playing_view is None and self._view_factory:
+            self._now_playing_view = self._view_factory(self)
+        return self._now_playing_view
+
     async def _progress_update_loop(self):
         """Periodically refresh the now playing embed with live progress."""
         try:
@@ -288,7 +307,9 @@ class MusicPlayer:
                     return
                 try:
                     embed = self._build_now_playing_embed()
-                    view = self._view_factory(self) if self._view_factory else None
+                    view = self._get_now_playing_view()
+                    if view and hasattr(view, "_update_buttons"):
+                        view._update_buttons()
                     await self.now_playing_message.edit(embed=embed, view=view)
                 except (discord.HTTPException, discord.NotFound):
                     return
@@ -586,9 +607,7 @@ class MusicPlayer:
             await self._disable_now_playing_buttons()
             if self.text_channel:
                 embed = self._build_now_playing_embed()
-                view = None
-                if self._view_factory:
-                    view = self._view_factory(self)
+                view = self._get_now_playing_view()
                 if embed:
                     self.now_playing_message = await self.text_channel.send(
                         embed=embed, view=view
@@ -614,6 +633,12 @@ class MusicPlayer:
     async def _disable_now_playing_buttons(self):
         """Delete the current Now Playing message and lyrics messages."""
         self._cancel_progress_updater()
+        if self._now_playing_view:
+            try:
+                self._now_playing_view.stop()
+            except Exception:
+                pass
+            self._now_playing_view = None
 
         # Delete lyrics messages first
         await self._delete_lyrics_messages()

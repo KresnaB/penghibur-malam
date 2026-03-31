@@ -17,26 +17,29 @@ async def get_lyrics_concurrently(query: str, duration: int = None, loop: asynci
     # Create tasks
     task_lrclib = asyncio.create_task(get_lrclib(query, duration))
     task_genius = asyncio.create_task(search_genius(query, loop=loop))
-    
+
     pending = {task_lrclib, task_genius}
-    
-    while pending:
-        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-        
-        for task in done:
-            try:
-                result = task.result()
-                if result:
-                    # Valid result found!
-                    logger.info(f"Lyrics race won by: {result.get('source', 'Unknown')}")
-                    
-                    # Cancel remaining tasks
-                    for p in pending:
-                        p.cancel()
-                        
-                    return result
-            except Exception as e:
-                logger.error(f"Lyrics task failed: {e}")
-                
-    logger.info("Lyrics race finished: No lyrics found from any source.")
-    return None
+    try:
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+
+            for task in done:
+                try:
+                    result = task.result()
+                    if result:
+                        logger.info(f"Lyrics race won by: {result.get('source', 'Unknown')}")
+                        for p in pending:
+                            p.cancel()
+                        if pending:
+                            await asyncio.gather(*pending, return_exceptions=True)
+                        return result
+                except Exception as e:
+                    logger.error(f"Lyrics task failed: {e}")
+
+        logger.info("Lyrics race finished: No lyrics found from any source.")
+        return None
+    finally:
+        for task in (task_lrclib, task_genius):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(task_lrclib, task_genius, return_exceptions=True)

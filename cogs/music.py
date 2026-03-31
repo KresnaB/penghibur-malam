@@ -44,6 +44,7 @@ class Music(commands.Cog):
         if guild.id not in self.players:
             player = MusicPlayer(self.bot, guild)
             player._view_factory = lambda p: NowPlayingView(p)
+            player._cleanup_callback = self.cleanup_player
             self.players[guild.id] = player
         return self.players[guild.id]
 
@@ -65,12 +66,23 @@ class Music(commands.Cog):
             delete_after = self.CHAT_CLEANUP_DELAY
 
         payload = {"embed": embed, "ephemeral": ephemeral}
-        if delete_after is not None and not ephemeral:
-            payload["delete_after"] = delete_after
-
         if interaction.response.is_done():
-            await interaction.followup.send(**payload)
+            if delete_after is not None and not ephemeral:
+                message = await interaction.followup.send(**payload, wait=True)
+
+                async def _delete_later(msg: discord.Message, delay: int):
+                    await asyncio.sleep(delay)
+                    try:
+                        await msg.delete()
+                    except Exception:
+                        pass
+
+                asyncio.create_task(_delete_later(message, delete_after))
+            else:
+                await interaction.followup.send(**payload)
         else:
+            if delete_after is not None and not ephemeral:
+                payload["delete_after"] = delete_after
             await interaction.response.send_message(**payload)
 
     # ─────────────────────── Helper Checks ───────────────────────

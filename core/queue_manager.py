@@ -126,3 +126,19 @@ class QueueManager:
         """Put a track at the back of the queue (for loop queue)."""
         async with self._lock:
             self._queue.append(track)
+
+    async def prune(self, predicate) -> list[Track]:
+        """Remove tracks that do not satisfy predicate and return removed items."""
+        async with self._lock:
+            kept: list[Track] = []
+            removed: list[Track] = []
+            for track in self._queue:
+                try:
+                    if predicate(track):
+                        kept.append(track)
+                    else:
+                        removed.append(track)
+                except Exception:
+                    removed.append(track)
+            self._queue = kept
+            return removed

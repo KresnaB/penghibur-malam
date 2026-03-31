@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 
 import discord
@@ -26,6 +27,8 @@ logger = logging.getLogger('omnia.music')
 
 class Music(commands.Cog):
     """Music commands for Omnia bot."""
+
+    CHAT_CLEANUP_DELAY = 20
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -48,6 +51,27 @@ class Music(commands.Cog):
         """Remove player for a guild."""
         if guild_id in self.players:
             del self.players[guild_id]
+
+    async def _send_embed(
+        self,
+        interaction: discord.Interaction,
+        embed: discord.Embed,
+        *,
+        ephemeral: bool = False,
+        delete_after: int | None = None,
+    ):
+        """Send an embed and auto-delete non-ephemeral confirmations."""
+        if not ephemeral and delete_after is None:
+            delete_after = self.CHAT_CLEANUP_DELAY
+
+        payload = {"embed": embed, "ephemeral": ephemeral}
+        if delete_after is not None and not ephemeral:
+            payload["delete_after"] = delete_after
+
+        if interaction.response.is_done():
+            await interaction.followup.send(**payload)
+        else:
+            await interaction.response.send_message(**payload)
 
     # ─────────────────────── Helper Checks ───────────────────────
 
@@ -93,6 +117,35 @@ class Music(commands.Cog):
             return None
 
         return h * 3600 + m * 60 + s
+
+    def _parse_duration(self, value: str) -> int | None:
+        """
+        Parse duration strings like:
+        - `45m`
+        - `1h`
+        - `1h30m`
+        - `90s`
+        - `off` / `cancel`
+        """
+        if not value:
+            return None
+
+        value = value.strip().lower()
+        if value in {"off", "cancel", "none", "stop"}:
+            return 0
+
+        pattern = r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?"
+        match = re.fullmatch(pattern, value)
+        if not match:
+            if value.isdigit():
+                return int(value) * 60
+            return None
+
+        hours = int(match.group(1) or 0)
+        minutes = int(match.group(2) or 0)
+        seconds = int(match.group(3) or 0)
+        total = hours * 3600 + minutes * 60 + seconds
+        return total if total > 0 else None
 
     async def _ensure_voice(self, interaction: discord.Interaction) -> bool:
         """Check that user is in a voice channel. Returns False if not."""
@@ -222,13 +275,14 @@ class Music(commands.Cog):
             track = added_tracks[0]
             if player.is_playing or player.current:
                 embed = EmbedBuilder.added_to_queue(track, position)
-                await interaction.followup.send(embed=embed)
+                await self._send_embed(interaction, embed)
             else:
-                await interaction.followup.send(
-                    embed=EmbedBuilder.success(
+                await self._send_embed(
+                    interaction,
+                    EmbedBuilder.success(
                         "🎵 Memulai Pemutaran",
                         f"**[{track.title}]({track.url})**"
-                    )
+                    ),
                 )
         else:
             # Playlist added
@@ -239,7 +293,7 @@ class Music(commands.Cog):
                 "📜 Playlist Ditambahkan",
                 desc
             )
-            await interaction.followup.send(embed=embed)
+            await self._send_embed(interaction, embed)
 
         # Start playback whenever the player is idle. Clear stale current state
         # left behind by unexpected voice disconnects before starting again.
@@ -263,17 +317,16 @@ class Music(commands.Cog):
         player = self.get_player(interaction.guild)
 
         if not player.is_playing:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
-                ephemeral=True
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                ephemeral=True,
             )
             return
 
         current_title = player.current.title if player.current else "Unknown"
         await player.skip()
-        await interaction.response.send_message(
-            embed=EmbedBuilder.success("⏭️ Skipped", f"**{current_title}**")
-        )
+        await self._send_embed(interaction, EmbedBuilder.success("⏭️ Skipped", f"**{current_title}**"))
 
     # ─────────────────────── /seek ───────────────────────
 
@@ -291,23 +344,25 @@ class Music(commands.Cog):
         player = self.get_player(interaction.guild)
 
         if not player.current or not player.is_playing:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
-                ephemeral=True
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                ephemeral=True,
             )
             return
 
         seconds = self._parse_timestamp(timestamp)
         if seconds is None:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.error(
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error(
                     "Format timestamp tidak valid.\n"
                     "Gunakan salah satu format berikut:\n"
                     "- `120` (detik)\n"
                     "- `2:30` (menit:detik)\n"
                     "- `1:02:30` (jam:menit:detik)"
                 ),
-                ephemeral=True
+                ephemeral=True,
             )
             return
 
@@ -315,9 +370,10 @@ class Music(commands.Cog):
 
         success = await player.seek(seconds)
         if not success:
-            await interaction.followup.send(
-                embed=EmbedBuilder.error("Gagal melakukan seek ke posisi tersebut."),
-                ephemeral=True
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error("Gagal melakukan seek ke posisi tersebut."),
+                ephemeral=True,
             )
             return
 
@@ -330,8 +386,9 @@ class Music(commands.Cog):
         else:
             pos_str = f"{m:02d}:{s:02d}"
 
-        await interaction.followup.send(
-            embed=EmbedBuilder.success(
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(
                 "⏩ Seek",
                 f"Lompat ke posisi **{pos_str}** pada lagu saat ini."
             )
@@ -341,7 +398,7 @@ class Music(commands.Cog):
 
     @app_commands.command(name="stop", description="Stop pemutaran dan kosongkan queue")
     async def stop(self, interaction: discord.Interaction):
-        """Stop playback, clear queue, and disconnect."""
+        """Stop playback and clear queue without leaving voice."""
         if not await self._ensure_voice(interaction):
             return
         if not await self._ensure_same_channel(interaction):
@@ -349,11 +406,54 @@ class Music(commands.Cog):
 
         player = self.get_player(interaction.guild)
         await player.stop()
-        await player.disconnect()
-        self.cleanup_player(interaction.guild.id)
 
-        await interaction.response.send_message(
-            embed=EmbedBuilder.success("⏹️ Stopped", "Pemutaran dihentikan dan queue dikosongkan.")
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(
+                "⏹️ Stopped",
+                "Pemutaran dihentikan dan queue dikosongkan. Bot tetap di voice channel."
+            )
+        )
+
+    # ─────────────────────── /sleep ───────────────────────
+
+    @app_commands.command(name="sleep", description="Atur timer untuk stop dan disconnect otomatis")
+    @app_commands.describe(duration="Contoh: 30m, 1h30m, 90s, atau off untuk membatalkan")
+    async def sleep(self, interaction: discord.Interaction, duration: str):
+        """Set or cancel a sleep timer."""
+        if not await self._ensure_voice(interaction):
+            return
+        if not await self._ensure_same_channel(interaction):
+            return
+
+        player = self.get_player(interaction.guild)
+        seconds = self._parse_duration(duration)
+        if seconds is None:
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error(
+                    "Format timer tidak valid.\n"
+                    "Gunakan `30m`, `1h30m`, `90s`, atau `off`."
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if seconds == 0:
+            await player.cancel_sleep_timer()
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.success("😴 Sleep Timer", "Timer tidur dibatalkan.")
+            )
+            return
+
+        await player.set_sleep_timer(seconds, label=f"Timer tidur {duration}")
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(
+                "😴 Sleep Timer",
+                f"Bot akan stop dan disconnect dalam **{duration}**."
+            )
         )
 
     # ─────────────────────── /reconnect ───────────────────────
@@ -430,7 +530,7 @@ class Music(commands.Cog):
         if status_parts:
             embed.add_field(name="⚙️ Status", value=" • ".join(status_parts), inline=False)
 
-        await interaction.response.send_message(embed=embed)
+        await self._send_embed(interaction, embed)
 
     # ─────────────────────── /nowplaying ───────────────────────
 
@@ -440,13 +540,17 @@ class Music(commands.Cog):
         player = self.get_player(interaction.guild)
 
         if not player.current:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
-                ephemeral=True
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.error("Tidak ada lagu yang sedang diputar!"),
+                ephemeral=True,
             )
             return
 
-        embed = EmbedBuilder.now_playing(player.current)
+        embed = EmbedBuilder.now_playing(
+            player.current,
+            progress=player.current_progress_bar() if hasattr(player, "current_progress_bar") else None,
+        )
 
         # Add extra info
         info_parts = []
@@ -464,7 +568,7 @@ class Music(commands.Cog):
 
         embed.add_field(name="⚙️ Info", value=" • ".join(info_parts), inline=False)
 
-        await interaction.response.send_message(embed=embed)
+        await self._send_embed(interaction, embed)
 
     # ─────────────────────── /playlist ───────────────────────
 
@@ -473,8 +577,9 @@ class Music(commands.Cog):
         """Show saved playlists for this guild and allow user to choose one to play."""
         playlists = await self.playlists.get_playlists(interaction.guild.id)
         if not playlists:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.info(
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.info(
                     "📂 Playlist Kosong",
                     "Belum ada playlist yang disimpan untuk server ini.\n"
                     "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
@@ -515,7 +620,7 @@ class Music(commands.Cog):
             description="\n".join(lines)[:4096],
             color=discord.Color.from_rgb(138, 43, 226),
         )
-        await interaction.response.send_message(embed=embed)
+        await self._send_embed(interaction, embed)
 
     # ─────────────────────── /playlistdelete ───────────────────────
 
@@ -524,8 +629,9 @@ class Music(commands.Cog):
         """Show a dropdown of playlists for this guild and delete the selected one."""
         playlists = await self.playlists.get_playlists(interaction.guild.id)
         if not playlists:
-            await interaction.response.send_message(
-                embed=EmbedBuilder.info(
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.info(
                     "📂 Playlist Kosong",
                     "Belum ada playlist yang disimpan untuk server ini.\n"
                     "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
@@ -772,8 +878,9 @@ class Music(commands.Cog):
                 f"Hanya **{PlaylistStore.MAX_TRACKS}** lagu pertama yang disimpan."
             )
 
-        await interaction.followup.send(
-            embed=EmbedBuilder.success(
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(
                 "✅ Playlist Disalin",
                 f"Playlist **{stored_name}** berhasil disimpan untuk server ini.\n"
                 f"Total lagu tersimpan: **{len(tracks_data)}**.{note}"
@@ -802,8 +909,9 @@ class Music(commands.Cog):
         icons = {"off": "🚫", "single": "🔂", "queue": "🔁"}
         icon = icons.get(mode, "")
 
-        await interaction.response.send_message(
-            embed=EmbedBuilder.success(
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(
                 f"{icon} Loop Mode",
                 f"Loop diatur ke: **{mode}**"
             )
@@ -849,8 +957,9 @@ class Music(commands.Cog):
         if player.autoplay_mode != AutoplayMode.OFF:
             await player._trigger_autoplay_preload()
 
-        await interaction.response.send_message(
-            embed=EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
+        await self._send_embed(
+            interaction,
+            EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
         )
 
     # ─────────────────────── /status ───────────────────────
@@ -896,6 +1005,9 @@ class Music(commands.Cog):
                 value=f"**[{title}]({player.current.url})** [{player.current.duration_str}]",
                 inline=False
             )
+            progress = player.current_progress_bar() if hasattr(player, "current_progress_bar") else None
+            if progress:
+                embed.add_field(name="⏳ Progress", value=progress, inline=False)
         else:
             embed.add_field(name="🎵 Sedang Diputar", value="Tidak ada", inline=False)
 
@@ -925,8 +1037,28 @@ class Music(commands.Cog):
             inline=True
         )
 
+        # Sleep timer
+        sleep_remaining = player.sleep_timer_remaining
+        if sleep_remaining is not None:
+            minutes, seconds = divmod(int(sleep_remaining), 60)
+            hours, minutes = divmod(minutes, 60)
+            if hours:
+                sleep_text = f"{hours}j {minutes}m"
+            elif minutes:
+                sleep_text = f"{minutes}m {seconds:02d}s"
+            else:
+                sleep_text = f"{seconds}s"
+        else:
+            sleep_text = "Tidak aktif"
+
+        embed.add_field(
+            name="😴 Sleep Timer",
+            value=sleep_text,
+            inline=True
+        )
+
         embed.set_footer(text="Omnia Music 🎶")
-        await interaction.response.send_message(embed=embed)
+        await self._send_embed(interaction, embed)
 
     # ─────────────────────── /help ───────────────────────
 
@@ -942,6 +1074,7 @@ class Music(commands.Cog):
         embed.add_field(name="/skip", value="Skip lagu yang sedang diputar", inline=False)
         embed.add_field(name="/seek `<timestamp>`", value="Loncat ke posisi tertentu di lagu saat ini (detik, mm:ss, atau hh:mm:ss)", inline=False)
         embed.add_field(name="/stop", value="Stop pemutaran dan kosongkan queue", inline=False)
+        embed.add_field(name="/sleep `<durasi>`", value="Atur timer tidur, misalnya 30m, 1h30m, atau off untuk batal", inline=False)
         embed.add_field(name="/queue", value="Tampilkan antrian lagu", inline=False)
         embed.add_field(name="/move `<from> <to>`", value="Pindahkan lagu di queue", inline=False)
         embed.add_field(name="/nowplaying", value="Tampilkan lagu yang sedang diputar", inline=False)
@@ -955,7 +1088,7 @@ class Music(commands.Cog):
         embed.add_field(name="/playlistdelete", value="Hapus playlist yang tersimpan di server", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
         embed.set_footer(text="Omnia Music 🎶")
-        await interaction.response.send_message(embed=embed)
+        await self._send_embed(interaction, embed)
 
     # ─────────────────────── Voice State Listener ───────────────────────
 
@@ -1005,7 +1138,7 @@ class Music(commands.Cog):
                                     "Bot keluar karena sendirian di voice channel."
                                 )
                                 try:
-                                    await player.text_channel.send(embed=embed)
+                                    await player.text_channel.send(embed=embed, delete_after=20)
                                 except discord.HTTPException:
                                     pass
                             await player.disconnect()

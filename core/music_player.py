@@ -41,6 +41,11 @@ class MusicPlayer:
     """Music player instance for a single guild."""
 
     IDLE_TIMEOUT = 180  # 3 minutes
+    CHAT_CLEANUP_DELAY = 20
+    GAPLESS_WAIT_TIMEOUT = 2.0
+    PLAYBACK_RETRY_LIMIT = 2
+    FADE_IN_SECONDS = 0.35
+    FADE_OUT_SECONDS = 0.8
 
     def __init__(self, bot: discord.Client, guild: discord.Guild):
         self.bot = bot
@@ -60,6 +65,14 @@ class MusicPlayer:
         self._playing = asyncio.Event()
         self._play_history: list[str] = []  # Track URLs that have been played
         self._seeking = False  # True while replacing source for seek (ignore after_play from old source)
+        self._stopping = False  # True while a manual stop is draining the current source
+        self._sleep_task: asyncio.Task | None = None
+        self._sleep_until: float | None = None
+        self._sleep_label: str | None = None
+        self._playback_attempts: dict[str, int] = {}
+        self._track_started_at: float | None = None
+        self._track_paused_elapsed: float | None = None
+        self._progress_task: asyncio.Task | None = None
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -78,16 +91,70 @@ class MusicPlayer:
         vc = self.voice_client
         return vc is not None and vc.is_paused()
 
+    @property
+    def sleep_timer_remaining(self) -> float | None:
+        """Return remaining sleep timer seconds, if any."""
+        if self._sleep_until is None:
+            return None
+        remaining = self._sleep_until - asyncio.get_event_loop().time()
+        return max(0.0, remaining)
+
+    @property
+    def current_elapsed_seconds(self) -> float:
+        """Return the elapsed playback time for the active track."""
+        if self._track_paused_elapsed is not None:
+            return max(0.0, self._track_paused_elapsed)
+        if self._track_started_at is None:
+            return 0.0
+        return max(0.0, asyncio.get_event_loop().time() - self._track_started_at)
+
+    @property
+    def current_progress_ratio(self) -> float | None:
+        """Return progress ratio for the current track if duration is known."""
+        if not self.current or not self.current.duration:
+            return None
+        return min(1.0, self.current_elapsed_seconds / max(self.current.duration, 1))
+
+    @property
+    def current_progress_text(self) -> str | None:
+        """Return a formatted progress label for the active track."""
+        if not self.current:
+            return None
+
+        elapsed = int(self.current_elapsed_seconds)
+        if not self.current.duration:
+            return f"Live • {self._format_timestamp(elapsed)}"
+
+        total = int(self.current.duration)
+        return f"{self._format_timestamp(elapsed)} / {self._format_timestamp(total)}"
+
+    def current_progress_bar(self, width: int = 14) -> str | None:
+        """Return a compact visual progress bar for the active track."""
+        if not self.current:
+            return None
+
+        if not self.current.duration:
+            return "● Live stream"
+
+        ratio = self.current_progress_ratio or 0.0
+        filled = min(width, max(0, int(round(width * ratio))))
+        bar = "█" * filled + "░" * (width - filled)
+        return f"`{bar}` {self.current_progress_text}"
+
     async def pause(self):
         """Pause playback."""
         vc = self.voice_client
         if vc and vc.is_playing():
+            self._track_paused_elapsed = self.current_elapsed_seconds
             vc.pause()
 
     async def resume(self):
         """Resume playback."""
         vc = self.voice_client
         if vc and vc.is_paused():
+            if self._track_paused_elapsed is not None:
+                self._track_started_at = asyncio.get_event_loop().time() - self._track_paused_elapsed
+                self._track_paused_elapsed = None
             vc.resume()
 
     async def seek(self, position: int) -> bool:
@@ -143,6 +210,8 @@ class MusicPlayer:
                 options="-vn",
             )
             source = discord.PCMVolumeTransformer(source, volume=0.5)
+            self._track_started_at = asyncio.get_event_loop().time() - position
+            self._track_paused_elapsed = None
             vc.play(source, after=after_play)
             return True
         except Exception as e:
@@ -167,22 +236,152 @@ class MusicPlayer:
     async def disconnect(self):
         """Disconnect from voice and cleanup."""
         self._cancel_idle_timer()
+        await self.cancel_sleep_timer()
+        self._cancel_progress_updater()
         
         # Ensure buttons are removed
         await self._disable_now_playing_buttons()
         
         vc = self.voice_client
         if vc and vc.is_connected():
-            if vc.is_playing():
+            if vc.is_playing() or vc.is_paused():
                 vc.stop()
             await vc.disconnect()
         self.current = None
+        self._track_started_at = None
+        self._track_paused_elapsed = None
         await self.queue.clear()
+
+    async def cancel_sleep_timer(self):
+        """Cancel any scheduled sleep timer."""
+        self._sleep_until = None
+        self._sleep_label = None
+        current_task = asyncio.current_task()
+        if self._sleep_task and not self._sleep_task.done() and self._sleep_task is not current_task:
+            self._sleep_task.cancel()
+            try:
+                await self._sleep_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        self._sleep_task = None
+
+    def _cancel_progress_updater(self):
+        """Stop the periodic now playing progress updater."""
+        if self._progress_task and not self._progress_task.done():
+            self._progress_task.cancel()
+        self._progress_task = None
+
+    def _start_progress_updater(self):
+        """Start the periodic progress updater for the now playing message."""
+        self._cancel_progress_updater()
+        if self.current and self.now_playing_message:
+            self._progress_task = asyncio.create_task(self._progress_update_loop())
+
+    async def _progress_update_loop(self):
+        """Periodically refresh the now playing embed with live progress."""
+        try:
+            while self.current and self.now_playing_message and self.voice_client and self.voice_client.is_connected():
+                await asyncio.sleep(15)
+                if not self.current or not self.now_playing_message:
+                    return
+                try:
+                    embed = self._build_now_playing_embed()
+                    view = self._view_factory(self) if self._view_factory else None
+                    await self.now_playing_message.edit(embed=embed, view=view)
+                except (discord.HTTPException, discord.NotFound):
+                    return
+                except Exception as e:
+                    logger.debug(f"Progress updater failed: {e}")
+                    return
+        except asyncio.CancelledError:
+            pass
+
+    async def set_sleep_timer(self, delay_seconds: int, *, label: str | None = None):
+        """Set a sleep timer that disconnects the bot later."""
+        delay_seconds = max(1, int(delay_seconds))
+        await self.cancel_sleep_timer()
+        self._sleep_until = asyncio.get_event_loop().time() + delay_seconds
+        self._sleep_label = label
+        self._sleep_task = asyncio.create_task(self._sleep_disconnect_after(delay_seconds))
+
+    async def _sleep_disconnect_after(self, delay_seconds: int):
+        """Worker for the sleep timer."""
+        try:
+            await asyncio.sleep(delay_seconds)
+            if not self.voice_client or not self.voice_client.is_connected():
+                return
+
+            if self.text_channel:
+                message = "Timer tidur selesai."
+                if self._sleep_label:
+                    message = f"{self._sleep_label}. {message}"
+                embed = EmbedBuilder.info("😴 Sleep Timer", message)
+                try:
+                    await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
+                except discord.HTTPException:
+                    pass
+
+            await self.stop()
+            await self.disconnect()
+        except asyncio.CancelledError:
+            pass
 
     async def add_track(self, track: Track) -> int:
         """Add a track to the queue. Returns position."""
         position = await self.queue.add(track)
         return position
+
+    async def prune_queue(self) -> list[Track]:
+        """Remove tracks that are clearly invalid or unplayable."""
+        removed = await self.queue.prune(
+            lambda track: bool(
+                track
+                and getattr(track, "title", "").strip()
+                and (getattr(track, "url", "").strip() or getattr(track, "source_url", "").strip())
+            )
+        )
+
+        if removed and self.text_channel:
+            names = ", ".join(f"**{track.title}**" for track in removed[:3])
+            more = "" if len(removed) <= 3 else f" (+{len(removed) - 3} lainnya)"
+            embed = EmbedBuilder.info(
+                "🧹 Queue Pruned",
+                f"Track invalid dihapus otomatis: {names}{more}"
+            )
+            try:
+                await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
+            except discord.HTTPException:
+                pass
+
+        return removed
+
+    def _set_track_start(self, offset_seconds: float = 0.0):
+        """Remember when the current track started playing."""
+        self._track_started_at = asyncio.get_event_loop().time() - max(0.0, offset_seconds)
+        self._track_paused_elapsed = None
+
+    def _reset_track_progress(self):
+        """Clear playback progress tracking."""
+        self._track_started_at = None
+        self._track_paused_elapsed = None
+
+    def _build_now_playing_embed(self) -> discord.Embed | None:
+        """Build the now playing embed with current progress."""
+        if not self.current:
+            return None
+        return EmbedBuilder.now_playing(self.current, progress=self.current_progress_bar())
+
+    @staticmethod
+    def _format_timestamp(total_seconds: int | float) -> str:
+        """Format seconds as H:MM:SS or M:SS."""
+        total = max(0, int(total_seconds))
+        hours, remainder = divmod(total, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes}:{seconds:02d}"
 
     async def play_next(self):
         """Play the next track in the queue."""
@@ -191,7 +390,16 @@ class MusicPlayer:
             self._seeking = False
             return
 
+        # Manual stop should not behave like a natural track end.
+        if getattr(self, '_stopping', False):
+            self._stopping = False
+            self._cancel_idle_timer()
+            self._cancel_preload()
+            self._next_autoplay = None
+            return
+
         self._cancel_idle_timer()
+        await self.prune_queue()
 
         vc = self.voice_client
         if not vc or not vc.is_connected():
@@ -211,6 +419,8 @@ class MusicPlayer:
                      if not vc or not vc.is_connected():
                          logger.error("Reconnect failed. Stopping playback.")
                          self.current = None
+                         self._reset_track_progress()
+                         self._cancel_progress_updater()
                          self._cancel_preload()
                          self._next_autoplay = None
                          self._start_idle_timer()
@@ -218,6 +428,8 @@ class MusicPlayer:
                 except Exception as e:
                      logger.error(f"Failed to auto-reconnect: {e}")
                      self.current = None
+                     self._reset_track_progress()
+                     self._cancel_progress_updater()
                      self._cancel_preload()
                      self._next_autoplay = None
                      self._start_idle_timer()
@@ -225,6 +437,8 @@ class MusicPlayer:
             else:
                 logger.warning("No voice channel found to reconnect to. Stopping playback.")
                 self.current = None
+                self._reset_track_progress()
+                self._cancel_progress_updater()
                 self._cancel_preload()
                 self._next_autoplay = None
                 self._start_idle_timer()
@@ -260,7 +474,9 @@ class MusicPlayer:
             if next_track is None:
                 # Nothing to play — notify and start idle timer
                 self.current = None
+                self._reset_track_progress()
                 self._cancel_preload() # Cancel any pending preload
+                self._cancel_progress_updater()
                 self._next_autoplay = None
                 self._start_idle_timer()
 
@@ -274,7 +490,7 @@ class MusicPlayer:
                         "Queue kosong, tidak ada lagu selanjutnya.\nGunakan `/play` untuk memutar lagu baru."
                     )
                     try:
-                        await self.text_channel.send(embed=embed)
+                        await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
                     except discord.HTTPException:
                         pass
                 return
@@ -290,9 +506,9 @@ class MusicPlayer:
         # Wait for any pending pre-load to finish
         if self._preload_task and not self._preload_task.done():
             try:
-                # Wait up to 10s for pre-load (it should be faster)
+                # Keep the wait short so the next track starts with minimal gap.
                 logger.info("Waiting for pre-load to complete...")
-                await asyncio.wait_for(self._preload_task, timeout=10.0)
+                await asyncio.wait_for(self._preload_task, timeout=self.GAPLESS_WAIT_TIMEOUT)
             except Exception as e:
                 logger.warning(f"Waited for pre-load but it failed/timed out: {e}")
 
@@ -302,8 +518,7 @@ class MusicPlayer:
                 logger.info(f"Using pre-loaded URL for: {next_track.title}")
                 source = discord.FFmpegPCMAudio(
                     next_track.source_url,
-                    before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                    options='-vn'
+                    **self._build_ffmpeg_options(next_track)
                 )
                 source = discord.PCMVolumeTransformer(source, volume=0.5)
             else:
@@ -312,60 +527,57 @@ class MusicPlayer:
                     loop=self.bot.loop,
                     title_hint=next_track.title,
                     uploader_hint=next_track.uploader,
+                    ffmpeg_options=self._build_ffmpeg_options(next_track),
                 )
 
             def after_play(error):
                 if error:
                     logger.error(f'Player error: {error}')
-                # Schedule next track
-                asyncio.run_coroutine_threadsafe(
-                    self.play_next(), self.bot.loop
-                )
+                    asyncio.run_coroutine_threadsafe(
+                        self._recover_from_playback_error(next_track, error),
+                        self.bot.loop,
+                    )
+                    return
+                asyncio.run_coroutine_threadsafe(self.play_next(), self.bot.loop)
 
             # Stop if somehow already playing
-            if vc.is_playing():
+            if vc.is_playing() or vc.is_paused():
                 vc.stop()
                 await asyncio.sleep(0.5)
 
             vc.play(source, after=after_play)
+            self._playback_attempts.pop(self._track_key(next_track), None)
+            self._set_track_start(0)
 
             # Trigger pre-loading for the NEXT track
             self._schedule_preload()
 
         except Exception as e:
             logger.error(f'Error playing track: {e}')
-            
-            # Detect potential network/socket errors
-            error_str = str(e).lower()
-            is_network_error = any(err in error_str for err in ['socket', 'connection', 'reset', 'broken pipe', 'timeout'])
-            
             if self.text_channel:
-                 msg = f"Gagal memutar: **{next_track.title}**\n`{e}`"
-                 if is_network_error:
-                     msg += "\n*Tampaknya terjadi gangguan jaringan. Mencoba reconnect...*"
-                 embed = EmbedBuilder.error(msg)
-                 try:
-                     await self.text_channel.send(embed=embed)
-                 except discord.HTTPException:
-                     pass
-            
-            # Prevent rapid queue draining on network failure
-            await asyncio.sleep(5)
-            
-            if is_network_error:
-                 logger.warning("Network error detected. Refunding track to queue and attempting reconnect loop.")
-                 # Refund the track so it isn't lost
-                 await self.queue.put_front(next_track)
-                 self.current = None
-                 
-                 # Force disconnect to reset state so play_next() auto-reconnects cleanly
-                 try:
-                      if vc and vc.is_connected():
-                           await vc.disconnect(force=True)
-                 except Exception:
-                      pass
-            
-            # Try next track (which will trigger reconnect if disconnected, and play the refunded track)
+                message = f"Gagal memutar: **{next_track.title}**\n`{e}`"
+                if self._is_temporary_playback_error(e):
+                    message += "\n*Tampaknya ada gangguan stream. Bot akan mencoba lagi.*"
+                embed = EmbedBuilder.error(message)
+                try:
+                    await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
+                except discord.HTTPException:
+                    pass
+
+            key = self._track_key(next_track)
+            attempts = self._playback_attempts.get(key, 0)
+            if self._is_temporary_playback_error(e) and attempts < self.PLAYBACK_RETRY_LIMIT:
+                self._playback_attempts[key] = attempts + 1
+                await self.queue.put_front(next_track)
+                self.current = None
+                try:
+                    if vc and vc.is_connected():
+                        await vc.disconnect(force=True)
+                except Exception:
+                    pass
+                await asyncio.sleep(2 ** attempts)
+
+            # Try next track. If the same track was refunded, it will be retried first.
             await self.play_next()
             return
 
@@ -373,13 +585,15 @@ class MusicPlayer:
         try:
             await self._disable_now_playing_buttons()
             if self.text_channel:
-                embed = EmbedBuilder.now_playing(next_track)
+                embed = self._build_now_playing_embed()
                 view = None
                 if self._view_factory:
                     view = self._view_factory(self)
-                self.now_playing_message = await self.text_channel.send(
-                    embed=embed, view=view
-                )
+                if embed:
+                    self.now_playing_message = await self.text_channel.send(
+                        embed=embed, view=view
+                    )
+                    self._start_progress_updater()
         except Exception as e:
             logger.warning(f'Error sending now playing embed: {e}')
 
@@ -399,6 +613,8 @@ class MusicPlayer:
 
     async def _disable_now_playing_buttons(self):
         """Delete the current Now Playing message and lyrics messages."""
+        self._cancel_progress_updater()
+
         # Delete lyrics messages first
         await self._delete_lyrics_messages()
         
@@ -422,6 +638,7 @@ class MusicPlayer:
         """Stop playback and clear queue."""
         await self.queue.clear()
         self.current = None
+        self._reset_track_progress()
         self.loop_mode = LoopMode.OFF
         self.shuffle_mode = ShuffleMode.OFF
         self.current = None
@@ -429,13 +646,93 @@ class MusicPlayer:
         self.shuffle_mode = ShuffleMode.OFF
         self._play_history.clear()
         self._next_autoplay = None
+        self._reset_track_progress()
+        await self.cancel_sleep_timer()
+        self._cancel_progress_updater()
         
         # Remove buttons
         await self._disable_now_playing_buttons()
         
         vc = self.voice_client
-        if vc and vc.is_playing():
+        if vc and (vc.is_playing() or vc.is_paused()):
+            self._stopping = True
             vc.stop()
+
+    def _track_key(self, track: Track | None) -> str:
+        """Build a stable key for retry bookkeeping."""
+        if not track:
+            return ""
+        return track.url or track.source_url or track.title
+
+    def _build_ffmpeg_options(self, track: Track) -> dict[str, str]:
+        """Build ffmpeg options with gentle fades for smoother transitions."""
+        filters = [f"afade=t=in:st=0:d={self.FADE_IN_SECONDS}"]
+        if track.duration and track.duration > int(self.FADE_OUT_SECONDS) + 1:
+            fade_start = max(track.duration - self.FADE_OUT_SECONDS, 0)
+            filters.append(f"afade=t=out:st={fade_start}:d={self.FADE_OUT_SECONDS}")
+        return {
+            "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "options": "-vn -af " + ",".join(filters),
+        }
+
+    def _is_temporary_playback_error(self, error: Exception | str) -> bool:
+        """Classify playback failures that should be retried."""
+        message = str(error).lower()
+        tokens = (
+            "socket",
+            "connection",
+            "reset",
+            "broken pipe",
+            "timeout",
+            "timed out",
+            "503",
+            "502",
+            "500",
+            "403",
+            "remote end closed",
+            "ffmpeg",
+            "http error",
+        )
+        return any(token in message for token in tokens)
+
+    async def _recover_from_playback_error(self, track: Track, error: Exception | str):
+        """Retry the current track after a temporary failure."""
+        key = self._track_key(track)
+        attempts = self._playback_attempts.get(key, 0)
+
+        if attempts >= self.PLAYBACK_RETRY_LIMIT:
+            logger.warning(f"Playback retries exhausted for {track.title}")
+            self._playback_attempts.pop(key, None)
+            self.current = None
+            await self.play_next()
+            return
+
+        self._playback_attempts[key] = attempts + 1
+
+        if self.text_channel:
+            if self._is_temporary_playback_error(error):
+                body = f"{track.title}\nStream error terdeteksi. Mencoba ulang..."
+            else:
+                body = f"{track.title}\nPlayback gagal. Mencoba pemulihan..."
+            embed = EmbedBuilder.info("🔄 Playback Recovery", body)
+            try:
+                await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
+            except discord.HTTPException:
+                pass
+
+        await asyncio.sleep(2 ** attempts)
+
+        await self.queue.put_front(track)
+        self.current = None
+
+        vc = self.voice_client
+        if vc and vc.is_connected():
+            try:
+                await vc.disconnect(force=True)
+            except Exception:
+                pass
+
+        await self.play_next()
 
     async def set_shuffle(self, mode: int):
         """Set shuffle mode and shuffle queue."""
@@ -555,7 +852,7 @@ class MusicPlayer:
                         f"Bot keluar karena idle selama {self.IDLE_TIMEOUT // 60} menit."
                     )
                     try:
-                        await self.text_channel.send(embed=embed)
+                        await self.text_channel.send(embed=embed, delete_after=self.CHAT_CLEANUP_DELAY)
                     except discord.HTTPException:
                         pass
                 await self.disconnect()

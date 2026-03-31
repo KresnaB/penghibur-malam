@@ -20,7 +20,7 @@ class EmbedBuilder:
     COLOR_AUTOPLAY = discord.Color.from_rgb(255, 165, 0)   # Orange
 
     @staticmethod
-    def now_playing(track: Track) -> discord.Embed:
+    def now_playing(track: Track, progress: str | None = None) -> discord.Embed:
         """Create a Now Playing embed."""
         embed = discord.Embed(
             title="🎵 Now Playing",
@@ -36,6 +36,8 @@ class EmbedBuilder:
         )
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
+        if progress:
+            embed.add_field(name="⏳ Progress", value=progress, inline=False)
         embed.set_footer(text="Omnia Music 🎶")
         return embed
 

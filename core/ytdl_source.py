@@ -420,6 +420,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         loop: asyncio.AbstractEventLoop = None,
         title_hint: str = "",
         uploader_hint: str = "",
+        ffmpeg_options: dict | None = None,
     ):
         """
         Create audio source from a SPECIFIC URL (used by player).
@@ -435,7 +436,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if not source_url:
             raise ValueError("Gagal mendapatkan URL audio.")
 
-        source = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
+        source = discord.FFmpegPCMAudio(source_url, **(ffmpeg_options or FFMPEG_OPTIONS))
         return cls(source, data=data), data
 
     @classmethod

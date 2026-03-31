@@ -7,8 +7,6 @@ import discord
 from discord import ui
 
 from utils.embed_builder import EmbedBuilder
-from utils.embed_builder import EmbedBuilder
-from utils.embed_builder import EmbedBuilder
 from utils.genius_lyrics import split_lyrics # Keep split_lyrics
 from utils.lyrics_service import get_lyrics_concurrently
 
@@ -86,7 +84,10 @@ class NowPlayingView(ui.View):
         """Update the embed and buttons after a button press."""
         self._update_buttons()
         if self.player.current:
-            embed = EmbedBuilder.now_playing(self.player.current)
+            embed = EmbedBuilder.now_playing(
+                self.player.current,
+                progress=self.player.current_progress_bar(),
+            )
             await interaction.response.edit_message(embed=embed, view=self)
         else:
             await interaction.response.edit_message(view=self)
@@ -136,17 +137,16 @@ class NowPlayingView(ui.View):
     async def btn_stop(self, interaction: discord.Interaction, button: ui.Button):
         """Stop playback."""
         try:
-            # Defer to allow time for disconnect
+            # Defer to allow time for queue cleanup
             await interaction.response.defer()
             await self.player.stop()
-            await self.player.disconnect()
 
             # Send stopped confirmation
             embed = EmbedBuilder.info(
                 "⏹️ Pemutaran Selesai",
-                "Queue dikosongkan dan pemutaran dihentikan."
+                "Queue dikosongkan dan pemutaran dihentikan. Bot tetap di voice channel."
             )
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed, delete_after=20)
         except Exception:
             pass
 

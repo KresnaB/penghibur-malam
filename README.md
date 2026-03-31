@@ -9,7 +9,8 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 | `/play <query>` | Putar lagu (YouTube URL, Playlist, atau keyword) |
 | `/skip` | Skip lagu saat ini |
 | `/seek <timestamp>` | Loncat ke posisi tertentu di lagu saat ini (detik, `mm:ss`, atau `hh:mm:ss`) |
-| `/stop` | Stop dan disconnect |
+| `/stop` | Stop pemutaran dan kosongkan queue, bot tetap di voice |
+| `/sleep <durasi>` | Atur timer tidur, misalnya `30m`, `1h30m`, atau `off` |
 | `/queue` | Lihat antrian lagu |
 | `/move <from> <to>` | Pindahkan lagu di queue |
 | `/nowplaying` | Info lagu yang diputar |
@@ -26,6 +27,10 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 ### 🔧 Fitur Otomatis
 - **Auto disconnect** saat idle 3 menit
 - **Auto disconnect** saat sendirian di VC
+- **Sleep timer** untuk stop dan disconnect otomatis setelah durasi tertentu
+- **Auto clean chat** untuk respons status yang sementara
+- **Seamless transitions** dengan handoff cepat dan smoothing audio ringan
+- **Playback recovery** yang mencoba ulang stream saat terjadi gangguan sementara
 - **Autoplay** memutar lagu terkait otomatis secara cerdas. Tersedia mode YouTube (dasar), Custom 1 (relevan), dan Custom 2 (eksploratif).
 - **Playlist limit** maksimal 50 lagu per request
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar

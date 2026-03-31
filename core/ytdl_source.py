@@ -15,6 +15,7 @@ import yt_dlp
 
 logger = logging.getLogger('omnia.ytdl')
 POT_PROVIDER_URL = os.getenv('POT_PROVIDER_URL', 'http://pot-provider:4416')
+POT_PROVIDER_BASE = POT_PROVIDER_URL.rstrip('/')
 
 # --- Startup diagnostic: check if PO Token plugin is installed ---
 def _check_pot_plugin():
@@ -34,7 +35,7 @@ def _check_pot_plugin():
 
     import urllib.request
     try:
-        req = urllib.request.urlopen(POT_PROVIDER_URL, timeout=3)
+        req = urllib.request.urlopen(f"{POT_PROVIDER_BASE}/ping", timeout=3)
         logger.info(f"✅ PO Token server reachable at pot-provider:4416 (status {req.status})")
     except Exception as e:
         logger.warning(f"⚠️ PO Token server NOT reachable at pot-provider:4416: {e}")
@@ -62,7 +63,12 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'js_runtimes': {'node': {}, 'deno': {}},
     # Use mweb client (supports PO Token) + PO Token Provider server
     'extractor_args': {
-        'youtube': ['player_client=mweb'],
+        # Keep both the modern provider arg and a legacy youtube arg so the
+        # provider keeps working if one config path is ignored by yt-dlp.
+        'youtube': [
+            'player_client=mweb',
+            f'getpot_bgutil_baseurl={POT_PROVIDER_URL}',
+        ],
         'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,

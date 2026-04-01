@@ -18,6 +18,7 @@ POT_PROVIDER_URL = os.getenv('POT_PROVIDER_URL', 'http://pot-provider:4416')
 POT_PROVIDER_BASE = POT_PROVIDER_URL.rstrip('/')
 COOKIE_FILE = os.getenv('YTDLP_COOKIEFILE', '/app/cookies.txt')
 VISITOR_DATA = os.getenv('YTDLP_VISITOR_DATA', '').strip()
+USE_COOKIES = os.getenv('YTDLP_USE_COOKIES', '').strip().lower() in {"1", "true", "yes", "on"}
 
 # --- Startup diagnostic: check if PO Token plugin is installed ---
 def _check_pot_plugin():
@@ -65,19 +66,19 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'js_runtimes': {'node': {}, 'deno': {}},
     # Use mweb client (supports PO Token) + PO Token Provider server
     'extractor_args': {
-        # Keep both the modern provider arg and a legacy youtube arg so the
-        # provider keeps working if one config path is ignored by yt-dlp.
-        'youtube': ['player_client=mweb'],
+        # Let yt-dlp choose the best authenticated YouTube clients by default.
+        # Forcing mweb has been causing "Only images are available" on some videos.
+        'youtube': [],
         'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,
 }
 
-if os.path.isfile(COOKIE_FILE):
+if USE_COOKIES and os.path.isfile(COOKIE_FILE):
     BASE_YTDL_FORMAT_OPTIONS['cookiefile'] = COOKIE_FILE
     logger.info(f"Using yt-dlp cookie file: {COOKIE_FILE}")
 else:
-    logger.warning(f"yt-dlp cookie file not found at: {COOKIE_FILE}")
+    logger.info("yt-dlp cookie file disabled; using unauthenticated clients by default")
 
 if VISITOR_DATA:
     BASE_YTDL_FORMAT_OPTIONS.setdefault('extractor_args', {}).setdefault('youtube', []).append(

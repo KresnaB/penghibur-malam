@@ -74,6 +74,7 @@ class MusicPlayer:
         self._track_started_at: float | None = None
         self._track_paused_elapsed: float | None = None
         self._progress_task: asyncio.Task | None = None
+        self._active_source: discord.AudioSource | None = None
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -202,6 +203,7 @@ class MusicPlayer:
         try:
             if vc.is_playing() or vc.is_paused():
                 self._seeking = True
+                self._cleanup_active_source()
                 vc.stop()
                 await asyncio.sleep(0.3)
 
@@ -213,6 +215,7 @@ class MusicPlayer:
             source = discord.PCMVolumeTransformer(source, volume=0.5)
             self._track_started_at = asyncio.get_event_loop().time() - position
             self._track_paused_elapsed = None
+            self._active_source = source
             vc.play(source, after=after_play)
             return True
         except Exception as e:
@@ -252,11 +255,13 @@ class MusicPlayer:
         vc = self.voice_client
         if vc and vc.is_connected():
             if vc.is_playing() or vc.is_paused():
+                self._cleanup_active_source()
                 vc.stop()
             await vc.disconnect()
         self.current = None
         self._track_started_at = None
         self._track_paused_elapsed = None
+        self._cleanup_active_source()
         await self.queue.clear()
         cleanup_callback = getattr(self, "_cleanup_callback", None)
         if callable(cleanup_callback):
@@ -565,9 +570,11 @@ class MusicPlayer:
 
             # Stop if somehow already playing
             if vc.is_playing() or vc.is_paused():
+                self._cleanup_active_source()
                 vc.stop()
                 await asyncio.sleep(0.5)
 
+            self._active_source = source
             vc.play(source, after=after_play)
             self._playback_attempts.pop(self._track_key(next_track), None)
             self._set_track_start(0)
@@ -683,6 +690,7 @@ class MusicPlayer:
         vc = self.voice_client
         if vc and (vc.is_playing() or vc.is_paused()):
             self._stopping = True
+            self._cleanup_active_source()
             vc.stop()
 
     def _track_key(self, track: Track | None) -> str:
@@ -755,6 +763,7 @@ class MusicPlayer:
         vc = self.voice_client
         if vc and vc.is_connected():
             try:
+                self._cleanup_active_source()
                 await vc.disconnect(force=True)
             except Exception:
                 pass
@@ -909,6 +918,19 @@ class MusicPlayer:
             if not self._preload_task.done():
                 self._preload_task.cancel()
             self._preload_task = None
+
+    def _cleanup_active_source(self):
+        """Best-effort cleanup for the current FFmpeg-backed audio source."""
+        source = self._active_source
+        self._active_source = None
+        if source is None:
+            return
+        cleanup = getattr(source, "cleanup", None)
+        if callable(cleanup):
+            try:
+                cleanup()
+            except Exception:
+                pass
 
     async def _preload_next_track(self):
         """

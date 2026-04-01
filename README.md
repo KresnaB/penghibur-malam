@@ -22,6 +22,7 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 | `/playlist` | Tampilkan daftar playlist server tanpa menu interaktif |
 | `/playlistplay` | Tampilkan daftar playlist server dan pilih dari dropdown untuk diputar / masuk ke queue |
 | `/playlistdelete` | Tampilkan daftar playlist server dalam dropdown dan hapus playlist yang dipilih |
+| `/radio` | Buka menu radio live berdasarkan kategori genre, mood, news, local, dan lainnya |
 | `/help` | Tampilkan daftar command |
 
 ### 🔧 Fitur Otomatis
@@ -32,6 +33,7 @@ Bot Discord pemutar musik tangguh dari YouTube dengan UI interaktif dan slash co
 - **Seamless transitions** dengan handoff cepat dan smoothing audio ringan
 - **Playback recovery** yang mencoba ulang stream saat terjadi gangguan sementara
 - **Autoplay** memutar lagu terkait otomatis secara cerdas. Tersedia mode YouTube (dasar), Custom 1 (relevan), dan Custom 2 (eksploratif).
+- **Radio live** memutar stasiun internet radio via menu kategori interaktif.
 - **Playlist limit** maksimal 50 lagu per request
 - **Fast first play** optimasi agar lagu pertama lebih cepat terdengar
 - **Lyrics** cari lirik lagu via Lrclib & Genius (Race Strategy)

@@ -23,6 +23,7 @@ from utils.now_playing_view import NowPlayingView
 from utils.genius_lyrics import search_lyrics, split_lyrics
 from utils.lyrics_service import get_lyrics_concurrently
 from utils.playlist_store import PlaylistStore
+from utils.radio_browser import RADIO_CATEGORY_PRESETS, RADIO_PAGE_SIZE, RadioBrowserClient
 
 logger = logging.getLogger('omnia.music')
 
@@ -41,6 +42,7 @@ class Music(commands.Cog):
         data_path = base_path / "data"
         data_path.mkdir(exist_ok=True)
         self.playlists = PlaylistStore(data_path / "playlists.json")
+        self.radio_browser = RadioBrowserClient()
 
     def get_player(self, guild: discord.Guild) -> MusicPlayer:
         """Get or create MusicPlayer for a guild."""
@@ -55,6 +57,10 @@ class Music(commands.Cog):
         """Remove player for a guild."""
         if guild_id in self.players:
             del self.players[guild_id]
+
+    async def _load_radio_stations(self, category_key: str, *, limit: int = RADIO_PAGE_SIZE * 3) -> list[dict]:
+        """Load radio stations for a category using Radio Browser."""
+        return await self.radio_browser.fetch_category(category_key, limit=limit)
 
     async def cog_load(self):
         """Start optional background services."""
@@ -1098,6 +1104,15 @@ class Music(commands.Cog):
 
     # ─────────────────────── /help ───────────────────────
 
+    @app_commands.command(name="radio", description="Pilih radio live berdasarkan kategori")
+    async def radio(self, interaction: discord.Interaction):
+        """Open an interactive radio browser."""
+        if not await self._ensure_voice(interaction):
+            return
+
+        view = RadioCategoryView(self, interaction.guild, interaction.user)
+        await interaction.response.send_message(embed=view.build_embed(), view=view, ephemeral=True)
+
     @app_commands.command(name="help", description="Tampilkan daftar command bot musik")
     async def help(self, interaction: discord.Interaction):
         """Show all available commands."""
@@ -1122,6 +1137,7 @@ class Music(commands.Cog):
         embed.add_field(name="/playlist", value="Tampilkan daftar playlist server", inline=False)
         embed.add_field(name="/playlistplay", value="Tampilkan daftar playlist server dan pilih dari dropdown untuk diputar / masuk ke queue", inline=False)
         embed.add_field(name="/playlistdelete", value="Hapus playlist yang tersimpan di server", inline=False)
+        embed.add_field(name="/radio", value="Pilih radio live berdasarkan kategori genre, mood, news, local, dan lainnya", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
         embed.set_footer(text="Omnia Music 🎶")
         await self._send_embed(interaction, embed)
@@ -1500,6 +1516,296 @@ class PlaylistDeleteView(discord.ui.View):
                 f"Playlist **{name}** telah dihapus dari server ini."
             ),
             ephemeral=True,
+        )
+
+
+class RadioCategoryView(discord.ui.View):
+    """First-step radio menu for choosing a station group."""
+
+    def __init__(self, music_cog: "Music", guild: discord.Guild, user: discord.Member):
+        super().__init__(timeout=120)
+        self.music_cog = music_cog
+        self.guild = guild
+        self.user = user
+
+        self.category_select = discord.ui.Select(
+            placeholder="Pilih kategori radio...",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label=cfg["label"],
+                    value=key,
+                    description=cfg["description"],
+                )
+                for key, cfg in RADIO_CATEGORY_PRESETS.items()
+            ],
+            row=0,
+        )
+        self.category_select.callback = self._on_category_select
+        self.add_item(self.category_select)
+
+    def build_embed(self) -> discord.Embed:
+        lines = [
+            "`Genre` untuk pop, rock, jazz, lo-fi, EDM, dan sejenisnya.",
+            "`Mood` untuk channel chill, relax, study, dan focus.",
+            "`News / Talk` untuk berita, obrolan, dan program informatif.",
+            "`Local` untuk radio dari Indonesia dan negara sekitar.",
+            "`Lainnya` untuk oldies, world, instrumental, dan opsi tambahan.",
+        ]
+        embed = discord.Embed(
+            title="📻 Radio",
+            description="Pilih kategori dulu, lalu pilih stasiun yang ingin diputar.\n\n" + "\n".join(lines),
+            color=discord.Color.from_rgb(138, 43, 226),
+        )
+        embed.set_footer(text="Omnia Music 🎶")
+        return embed
+
+    async def _on_category_select(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Menu radio ini tidak berlaku di server lain."),
+                ephemeral=True,
+            )
+            return
+
+        if not await self.music_cog._ensure_voice(interaction):
+            return
+
+        category_key = self.category_select.values[0] if self.category_select.values else ""
+        await interaction.response.defer()
+
+        stations = await self.music_cog._load_radio_stations(category_key)
+        if not stations:
+            await interaction.edit_original_response(
+                embed=EmbedBuilder.error(
+                    "Tidak ada stasiun radio yang berhasil dimuat untuk kategori ini.\n"
+                    "Coba pilih kategori lain."
+                ),
+                view=self,
+            )
+            return
+
+        view = RadioStationView(
+            music_cog=self.music_cog,
+            guild=self.guild,
+            user=self.user,
+            category_key=category_key,
+            stations=stations,
+            parent_view=self,
+        )
+        await interaction.edit_original_response(embed=view.build_embed(), view=view)
+
+
+class RadioStationView(discord.ui.View):
+    """Second-step radio menu for choosing a station to play."""
+
+    def __init__(
+        self,
+        music_cog: "Music",
+        guild: discord.Guild,
+        user: discord.Member,
+        category_key: str,
+        stations: list[dict],
+        parent_view: RadioCategoryView,
+    ):
+        super().__init__(timeout=120)
+        self.music_cog = music_cog
+        self.guild = guild
+        self.user = user
+        self.category_key = category_key
+        self.parent_view = parent_view
+        self._all_stations = list(stations)
+        self._current_page = 0
+        self._total_pages = max(1, (len(self._all_stations) + RADIO_PAGE_SIZE - 1) // RADIO_PAGE_SIZE)
+
+        self.station_select = discord.ui.Select(
+            placeholder="Pilih stasiun radio...",
+            min_values=1,
+            max_values=1,
+            options=self._build_options(),
+            row=0,
+        )
+        self.station_select.callback = self._on_station_select
+        self.add_item(self.station_select)
+
+        self.prev_button = discord.ui.Button(
+            style=discord.ButtonStyle.secondary,
+            label="◀ Previous",
+            row=1,
+        )
+        self.next_button = discord.ui.Button(
+            style=discord.ButtonStyle.secondary,
+            label="Next ▶",
+            row=1,
+        )
+        self.back_button = discord.ui.Button(
+            style=discord.ButtonStyle.primary,
+            label="Back",
+            row=1,
+        )
+        self.prev_button.callback = self._on_prev
+        self.next_button.callback = self._on_next
+        self.back_button.callback = self._on_back
+        self.add_item(self.prev_button)
+        self.add_item(self.next_button)
+        self.add_item(self.back_button)
+        self._update_nav_buttons()
+
+    def _category_label(self) -> str:
+        return str(RADIO_CATEGORY_PRESETS.get(self.category_key, {}).get("label", self.category_key))
+
+    def _build_options(self) -> list[discord.SelectOption]:
+        start = self._current_page * RADIO_PAGE_SIZE
+        slice_stations = self._all_stations[start : start + RADIO_PAGE_SIZE]
+        options: list[discord.SelectOption] = []
+        for i, station in enumerate(slice_stations):
+            global_idx = start + i
+            label = str(station.get("name", "Unknown Station"))
+            if len(label) > 90:
+                label = label[:87] + "..."
+            description = str(station.get("description", "Radio stream"))
+            if len(description) > 100:
+                description = description[:97] + "..."
+            options.append(
+                discord.SelectOption(
+                    label=label,
+                    value=str(global_idx),
+                    description=description,
+                )
+            )
+        return options
+
+    def _update_nav_buttons(self):
+        self.prev_button.disabled = self._current_page <= 0
+        self.next_button.disabled = self._current_page >= self._total_pages - 1
+
+    def build_embed(self) -> discord.Embed:
+        start = self._current_page * RADIO_PAGE_SIZE
+        slice_stations = self._all_stations[start : start + RADIO_PAGE_SIZE]
+        lines = []
+        for i, station in enumerate(slice_stations, start=start + 1):
+            name = str(station.get("name", "Unknown Station"))
+            desc = str(station.get("description", "Radio stream"))
+            lines.append(f"`{i}.` **{name}** — {desc}")
+
+        page_note = f"\n\nHalaman **{self._current_page + 1}** / **{self._total_pages}**"
+        embed = discord.Embed(
+            title=f"📻 Radio • {self._category_label()}",
+            description="\n".join(lines) + page_note,
+            color=discord.Color.from_rgb(30, 144, 255),
+        )
+        embed.set_footer(text="Pilih stasiun untuk mulai streaming.")
+        return embed
+
+    async def _on_prev(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = max(0, self._current_page - 1)
+        self.station_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _on_next(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        self._current_page = min(self._total_pages - 1, self._current_page + 1)
+        self.station_select.options = self._build_options()
+        self._update_nav_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def _on_back(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            return
+        await interaction.response.edit_message(embed=self.parent_view.build_embed(), view=self.parent_view)
+
+    async def _on_station_select(self, interaction: discord.Interaction):
+        if interaction.guild != self.guild:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Menu radio ini tidak berlaku di server lain."),
+                ephemeral=True,
+            )
+            return
+
+        if not await self.music_cog._ensure_voice(interaction):
+            return
+        if not await self.music_cog._ensure_same_channel(interaction):
+            return
+
+        if not self.station_select.values:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Tidak ada stasiun yang dipilih."),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            global_idx = int(self.station_select.values[0])
+        except ValueError:
+            global_idx = -1
+
+        if not (0 <= global_idx < len(self._all_stations)):
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Stasiun yang dipilih tidak valid."),
+                ephemeral=True,
+            )
+            return
+
+        station = self._all_stations[global_idx]
+        stream_url = str(station.get("stream_url") or "").strip()
+        if not stream_url:
+            await interaction.response.send_message(
+                embed=EmbedBuilder.error("Stream URL stasiun ini tidak tersedia."),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+
+        player = self.music_cog.get_player(interaction.guild)
+        player.text_channel = interaction.channel  # type: ignore[assignment]
+
+        try:
+            await player.stop()
+            for _ in range(10):
+                if not getattr(player, "_stopping", False):
+                    break
+                await asyncio.sleep(0.1)
+            await player.connect(interaction.user.voice.channel)  # type: ignore[union-attr]
+
+            radio_track = Track(
+                source_url=stream_url,
+                title=str(station.get("name", "Radio Stream")),
+                url=str(station.get("homepage") or stream_url),
+                duration=0,
+                thumbnail=str(station.get("favicon") or ""),
+                uploader=str(
+                    station.get("country")
+                    or station.get("country_code")
+                    or station.get("language")
+                    or "Radio Browser"
+                ),
+                requester=interaction.user,
+            )
+            await player.add_track(radio_track)
+            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
+                player.current = None
+            await player.play_next()
+        except Exception as e:
+            await interaction.edit_original_response(
+                embed=EmbedBuilder.error(f"Gagal memutar stasiun radio: `{e}`"),
+                view=self,
+            )
+            return
+
+        station_name = str(station.get("name", "Radio Stream"))
+        station_homepage = str(station.get("homepage") or stream_url)
+        await interaction.edit_original_response(
+            embed=EmbedBuilder.success(
+                "📻 Radio Diputar",
+                f"Sedang memutar **[{station_name}]({station_homepage})**.",
+            ),
+            view=None,
         )
 
 

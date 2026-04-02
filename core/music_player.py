@@ -263,6 +263,9 @@ class MusicPlayer:
         self._track_paused_elapsed = None
         self._cleanup_active_source()
         await self.queue.clear()
+        self._play_history.clear()
+        self._playback_attempts.clear()
+        self._next_autoplay = None
         cleanup_callback = getattr(self, "_cleanup_callback", None)
         if callable(cleanup_callback):
             try:
@@ -679,6 +682,7 @@ class MusicPlayer:
         self.loop_mode = LoopMode.OFF
         self.shuffle_mode = ShuffleMode.OFF
         self._play_history.clear()
+        self._playback_attempts.clear()
         self._next_autoplay = None
         self._reset_track_progress()
         await self.cancel_sleep_timer()

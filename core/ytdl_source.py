@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+from dataclasses import dataclass
 
 import discord
 import yt_dlp
@@ -110,8 +111,28 @@ def _extract_youtube_video_id(value: str) -> str | None:
     return match.group(1) if match else None
 
 
+@dataclass(slots=True)
+class RequesterInfo:
+    """Lightweight requester snapshot that avoids keeping a full Member alive."""
+
+    id: int
+    name: str
+    display_name: str
+
+
 class Track:
     """Represents a music track with metadata."""
+
+    __slots__ = (
+        "source_url",
+        "title",
+        "url",
+        "duration",
+        "thumbnail",
+        "uploader",
+        "requester",
+        "insert_id",
+    )
 
     def __init__(self, source_url: str, title: str, url: str, duration: int,
                  thumbnail: str, uploader: str, requester: discord.Member):
@@ -121,7 +142,16 @@ class Track:
         self.duration = int(duration) if duration else 0
         self.thumbnail = thumbnail
         self.uploader = uploader
-        self.requester = requester
+        if requester is not None:
+            self.requester = RequesterInfo(
+                id=getattr(requester, "id", 0) or 0,
+                name=getattr(requester, "name", None) or "Unknown",
+                display_name=getattr(requester, "display_name", None)
+                or getattr(requester, "name", None)
+                or "Unknown",
+            )
+        else:
+            self.requester = None
         self.insert_id = 0  # For tracking original order
 
     @property

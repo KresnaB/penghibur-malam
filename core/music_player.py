@@ -75,6 +75,7 @@ class MusicPlayer:
         self._track_paused_elapsed: float | None = None
         self._progress_task: asyncio.Task | None = None
         self._active_source: discord.AudioSource | None = None
+        self._playlist_enqueue_token = 0
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -239,6 +240,7 @@ class MusicPlayer:
 
     async def disconnect(self):
         """Disconnect from voice and cleanup."""
+        self.cancel_playlist_enqueue()
         self._cancel_idle_timer()
         await self.cancel_sleep_timer()
         self._cancel_progress_updater()
@@ -363,6 +365,19 @@ class MusicPlayer:
         """Add a track to the queue. Returns position."""
         position = await self.queue.add(track)
         return position
+
+    def begin_playlist_enqueue(self) -> int:
+        """Start a new playlist enqueue generation and return its token."""
+        self._playlist_enqueue_token += 1
+        return self._playlist_enqueue_token
+
+    def cancel_playlist_enqueue(self):
+        """Invalidate any background playlist enqueue task."""
+        self._playlist_enqueue_token += 1
+
+    def is_playlist_enqueue_active(self, token: int | None) -> bool:
+        """Check whether a playlist enqueue token is still valid."""
+        return token is not None and token == self._playlist_enqueue_token
 
     async def prune_queue(self) -> list[Track]:
         """Remove tracks that are clearly invalid or unplayable."""
@@ -673,6 +688,7 @@ class MusicPlayer:
 
     async def stop(self):
         """Stop playback and clear queue."""
+        self.cancel_playlist_enqueue()
         await self.queue.clear()
         self.current = None
         self._reset_track_progress()

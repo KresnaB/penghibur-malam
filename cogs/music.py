@@ -36,6 +36,7 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, MusicPlayer] = {}  # guild_id -> MusicPlayer
+        self._background_tasks: set[asyncio.Task] = set()
         self._memory_monitor: MemoryMonitor | None = None
         # Shared playlist storage (per guild, shared by all users)
         base_path = Path(__file__).resolve().parent.parent
@@ -52,6 +53,83 @@ class Music(commands.Cog):
             player._cleanup_callback = self.cleanup_player
             self.players[guild.id] = player
         return self.players[guild.id]
+
+    def _track_background_task(self, task: asyncio.Task):
+        """Keep track of background tasks so they can be cancelled on unload."""
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    def _build_track_from_entry(
+        self,
+        entry: dict,
+        requester: discord.abc.User,
+        playlist_title: str | None = None,
+    ) -> Track | None:
+        """Convert a yt-dlp entry into a Track object."""
+        web_url = entry.get("webpage_url")
+        if not web_url:
+            if entry.get("url"):
+                if len(entry["url"]) == 11:
+                    web_url = f"https://www.youtube.com/watch?v={entry['url']}"
+                else:
+                    web_url = entry["url"]
+            elif entry.get("id"):
+                web_url = f"https://www.youtube.com/watch?v={entry['id']}"
+            else:
+                return None
+
+        source_url = "" if playlist_title else entry.get("url", "")
+        if "youtube.com/watch" in source_url or "youtu.be/" in source_url:
+            source_url = ""
+
+        return Track(
+            source_url=source_url,
+            title=entry.get("title", "Unknown"),
+            url=web_url,
+            duration=entry.get("duration", 0),
+            thumbnail=entry.get("thumbnail", ""),
+            uploader=entry.get("uploader", "Unknown"),
+            requester=requester,
+        )
+
+    async def _enqueue_playlist_background(
+        self,
+        player: MusicPlayer,
+        entries: list[dict],
+        requester: discord.abc.User,
+        playlist_title: str | None,
+        *,
+        token: int,
+    ):
+        """Enqueue the rest of a playlist without blocking playback."""
+        try:
+            for index, entry in enumerate(entries, start=1):
+                if not player.is_playlist_enqueue_active(token):
+                    logger.info(
+                        "cmd:play playlist enqueue cancelled for guild=%s after %s queued tracks",
+                        player.guild.id,
+                        index - 1,
+                    )
+                    return
+
+                track = self._build_track_from_entry(entry, requester, playlist_title=playlist_title)
+                if track is None:
+                    continue
+
+                await player.add_track(track)
+
+                # Yield periodically so the event loop can start playback and
+                # handle other commands while a long playlist is being filled.
+                if index % 10 == 0:
+                    await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(
+                "cmd:play playlist background enqueue failed for guild=%s: %s",
+                player.guild.id,
+                e,
+            )
 
     def cleanup_player(self, guild_id: int):
         """Remove player for a guild."""
@@ -79,6 +157,11 @@ class Music(commands.Cog):
 
     async def cog_unload(self):
         """Stop optional background services."""
+        if self._background_tasks:
+            for task in list(self._background_tasks):
+                task.cancel()
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            self._background_tasks.clear()
         if self._memory_monitor is not None:
             await self._memory_monitor.stop()
             self._memory_monitor = None
@@ -262,6 +345,102 @@ class Music(commands.Cog):
                 embed=EmbedBuilder.error("Tidak ditemukan lagu.")
             )
             return
+
+        first_track = None
+        remaining_entries: list[dict] = []
+        for index, entry in enumerate(entries):
+            track = self._build_track_from_entry(entry, interaction.user, playlist_title=playlist_title)
+            if track is None:
+                continue
+
+            first_track = track
+            remaining_entries = entries[index + 1 :]
+            break
+
+        if first_track is None:
+            await interaction.followup.send(
+                embed=EmbedBuilder.error("Gagal memproses lagu dari playlist.")
+            )
+            return
+
+        # If the bot is still holding onto a live radio stream, stop it before
+        # starting the requested YouTube playback.
+        if player.current and player.current.duration == 0 and player.current.source_url:
+            current_url = str(player.current.url or "")
+            is_youtube_current = "youtube.com/watch" in current_url or "youtu.be/" in current_url
+            if not is_youtube_current:
+                logger.info(
+                    "cmd:play interrupting live stream before starting '%s'",
+                    playlist_title or first_track.title,
+                )
+                await player.stop()
+                for _ in range(10):
+                    if not getattr(player, "_stopping", False):
+                        break
+                    await asyncio.sleep(0.1)
+
+        # Invalidate any older background playlist loaders before starting a new one.
+        player.cancel_playlist_enqueue()
+
+        # Add the first track now, then fill the rest in the background.
+        position = await player.add_track(first_track)
+
+        if remaining_entries:
+            playlist_token = player.begin_playlist_enqueue()
+            task = asyncio.create_task(
+                self._enqueue_playlist_background(
+                    player,
+                    remaining_entries,
+                    interaction.user,
+                    playlist_title,
+                    token=playlist_token,
+                )
+            )
+            self._track_background_task(task)
+
+        t_process = asyncio.get_event_loop().time()
+        logger.info(
+            "cmd:play QUEUED first track in %.2fs. Remaining entries in background: %s",
+            t_process - t_extract,
+            len(remaining_entries),
+        )
+
+        # Notify user immediately.
+        if not remaining_entries:
+            if player.is_playing or player.current:
+                embed = EmbedBuilder.added_to_queue(first_track, position)
+                await self._send_embed(interaction, embed)
+            else:
+                await self._send_embed(
+                    interaction,
+                    EmbedBuilder.success(
+                        "🎵 Memulai Pemutaran",
+                        f"**[{first_track.title}]({first_track.url})**"
+                    ),
+                )
+        else:
+            desc = (
+                f"Lagu pertama dari **{playlist_title or 'Playlist'}** sudah dimulai, "
+                f"dan **{len(remaining_entries)}** lagu sisanya diproses di background."
+            )
+            if len(entries) >= 50:
+                desc += "\n⚠️ Playlist dibatasi maksimal **50 lagu**. Sisanya tidak dimasukkan."
+            await self._send_embed(
+                interaction,
+                EmbedBuilder.success(
+                    "📜 Playlist Ditambahkan",
+                    desc
+                ),
+            )
+
+        # Start playback whenever the player is idle. Clear stale current state
+        # left behind by unexpected voice disconnects before starting again.
+        if not player.is_playing:
+            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
+                player.current = None
+            await player.play_next()
+
+        return
 
         # Process entries
         added_tracks = []

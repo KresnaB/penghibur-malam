@@ -43,7 +43,7 @@ intents.voice_states = True
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
-    member_cache_flags=discord.MemberCacheFlags.voice,
+    member_cache_flags=discord.MemberCacheFlags.from_intents(intents),
     description='Omnia Music Bot 🎵'
 )
 

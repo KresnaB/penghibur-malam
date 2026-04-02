@@ -692,6 +692,8 @@ class MusicPlayer:
             self._stopping = True
             self._cleanup_active_source()
             vc.stop()
+            await asyncio.sleep(0)
+            self._cleanup_active_source()
 
     def _track_key(self, track: Track | None) -> str:
         """Build a stable key for retry bookkeeping."""

@@ -305,6 +305,22 @@ class Music(commands.Cog):
             )
             return
 
+        # If the bot is still holding onto a live radio stream, stop it before
+        # starting the requested YouTube playback.
+        if player.current and player.current.duration == 0 and player.current.source_url:
+            current_url = str(player.current.url or "")
+            is_youtube_current = "youtube.com/watch" in current_url or "youtu.be/" in current_url
+            if not is_youtube_current:
+                logger.info(
+                    "cmd:play interrupting live stream before starting '%s'",
+                    added_tracks[0].title if len(added_tracks) == 1 else playlist_title or "playlist",
+                )
+                await player.stop()
+                for _ in range(10):
+                    if not getattr(player, "_stopping", False):
+                        break
+                    await asyncio.sleep(0.1)
+
         # Add to queue
         for track in added_tracks:
             position = await player.add_track(track)

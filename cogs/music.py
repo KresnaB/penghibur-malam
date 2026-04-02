@@ -1,5 +1,5 @@
-﻿"""
-Music Cog â€” Slash commands for the music bot.
+"""
+Music Cog — Slash commands for the music bot.
 Handles all user-facing commands and voice state events.
 """
 
@@ -235,7 +235,7 @@ class Music(commands.Cog):
                 payload["delete_after"] = delete_after
             await interaction.response.send_message(**payload)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Helper Checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── Helper Checks ───────────────────────
 
     def _parse_timestamp(self, value: str) -> int | None:
         """
@@ -333,7 +333,7 @@ class Music(commands.Cog):
                 return False
         return True
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /play â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /play ───────────────────────
 
     @app_commands.command(name="play", description="Putar lagu dari YouTube (URL, Playlist, atau pencarian)")
     @app_commands.describe(query="YouTube URL, Playlist URL, atau kata kunci pencarian")
@@ -413,9 +413,20 @@ class Music(commands.Cog):
                     await asyncio.sleep(0.1)
 
         player.cancel_playlist_enqueue()
-        position = await player.add_track(first_track)
 
         is_playlist_query = bool(playlist_title)
+        was_playing = player.is_playing or player.current is not None
+
+        position = await player.add_track(first_track)
+
+        # Start playback IMMEDIATELY before sending embed — minimise delay
+        if not player.is_playing:
+            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
+                player.current = None
+            # Fire-and-forget so playback begins while we still respond to the user
+            asyncio.create_task(player.play_next())
+
+        # Start background loading of remaining playlist tracks
         if is_playlist_query:
             playlist_token = player.begin_playlist_enqueue()
             task = asyncio.create_task(
@@ -437,7 +448,7 @@ class Music(commands.Cog):
         )
 
         if not is_playlist_query:
-            if player.is_playing or player.current:
+            if was_playing:
                 await self._send_embed(interaction, EmbedBuilder.added_to_queue(first_track, position))
             else:
                 await self._send_embed(
@@ -455,12 +466,7 @@ class Music(commands.Cog):
                     f"Lagu pertama dari **{playlist_title or 'Playlist'}** sudah dimulai, dan sisa playlist diproses di background.",
                 ),
             )
-
-        if not player.is_playing:
-            if player.current and (not player.voice_client or not player.voice_client.is_connected()):
-                player.current = None
-            await player.play_next()
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /skip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /skip ───────────────────────
 
     @app_commands.command(name="skip", description="Skip lagu yang sedang diputar")
     async def skip(self, interaction: discord.Interaction):
@@ -484,7 +490,7 @@ class Music(commands.Cog):
         await player.skip()
         await self._send_embed(interaction, EmbedBuilder.success("â­ï¸ Skipped", f"**{current_title}**"))
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /seek â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /seek ───────────────────────
 
     @app_commands.command(name="seek", description="Loncat ke timestamp tertentu di lagu yang sedang diputar")
     @app_commands.describe(
@@ -550,7 +556,7 @@ class Music(commands.Cog):
             )
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /stop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /stop ───────────────────────
 
     @app_commands.command(name="stop", description="Stop pemutaran dan kosongkan queue")
     async def stop(self, interaction: discord.Interaction):
@@ -571,7 +577,7 @@ class Music(commands.Cog):
             )
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /sleep â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /sleep ───────────────────────
 
     @app_commands.command(name="sleep", description="Atur timer untuk stop dan disconnect otomatis")
     @app_commands.describe(duration="Contoh: 30m, 1h30m, 90s, atau off untuk membatalkan")
@@ -599,7 +605,7 @@ class Music(commands.Cog):
             await player.cancel_sleep_timer()
             await self._send_embed(
                 interaction,
-                EmbedBuilder.success("ðŸ˜´ Sleep Timer", "Timer tidur dibatalkan.")
+                EmbedBuilder.success("😴 Sleep Timer", "Timer tidur dibatalkan.")
             )
             return
 
@@ -607,12 +613,12 @@ class Music(commands.Cog):
         await self._send_embed(
             interaction,
             EmbedBuilder.success(
-                "ðŸ˜´ Sleep Timer",
+                "😴 Sleep Timer",
                 f"Bot akan stop dan disconnect dalam **{duration}**."
             )
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /reconnect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /reconnect ───────────────────────
 
     @app_commands.command(name="reconnect", description="Reset bot dan connect ulang ke voice")
     async def reconnect(self, interaction: discord.Interaction):
@@ -652,7 +658,7 @@ class Music(commands.Cog):
             
             await interaction.followup.send(
                 embed=EmbedBuilder.success(
-                    "ðŸ”„ Reconnected", 
+                    "🔄 Reconnected", 
                     f"Bot berhasil di-reset dan terhubung kembali ke **{voice_channel.name}**."
                 )
             )
@@ -662,7 +668,7 @@ class Music(commands.Cog):
                 embed=EmbedBuilder.error(f"Gagal reconnect: `{e}`")
             )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /queue ───────────────────────
 
     @app_commands.command(name="queue", description="Tampilkan antrian lagu")
     async def queue(self, interaction: discord.Interaction):
@@ -678,17 +684,17 @@ class Music(commands.Cog):
         if player.loop_mode != LoopMode.OFF:
             status_parts.append(f"ðŸ” Loop: **{player.loop_mode}**")
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
-            status_parts.append("ðŸ”„ Autoplay: **YouTube**")
+            status_parts.append("🔄 Autoplay: **YouTube**")
         elif player.autoplay_mode == AutoplayMode.CUSTOM:
-            status_parts.append("ðŸ”„ Autoplay: **Custom 1**")
+            status_parts.append("🔄 Autoplay: **Custom 1**")
         elif player.autoplay_mode == AutoplayMode.CUSTOM2:
-            status_parts.append("ðŸ”„ Autoplay: **Custom 2**")
+            status_parts.append("🔄 Autoplay: **Custom 2**")
         if status_parts:
             embed.add_field(name="âš™ï¸ Status", value=" â€¢ ".join(status_parts), inline=False)
 
         await self._send_embed(interaction, embed)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /nowplaying â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /nowplaying ───────────────────────
 
     @app_commands.command(name="nowplaying", description="Tampilkan lagu yang sedang diputar")
     async def nowplaying(self, interaction: discord.Interaction):
@@ -719,14 +725,14 @@ class Music(commands.Cog):
                 mode_name = "Custom 1"
             else:
                 mode_name = "Custom 2"
-            info_parts.append(f"ðŸ”„ Autoplay: {mode_name}")
-        info_parts.append(f"ðŸ“‹ Queue: {player.queue.size} lagu")
+            info_parts.append(f"🔄 Autoplay: {mode_name}")
+        info_parts.append(f"📋 Queue: {player.queue.size} lagu")
 
         embed.add_field(name="âš™ï¸ Info", value=" â€¢ ".join(info_parts), inline=False)
 
         await self._send_embed(interaction, embed)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /playlist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /playlist ───────────────────────
 
     @app_commands.command(name="playlistplay", description="Pilih playlist server untuk diputar")
     async def playlistplay(self, interaction: discord.Interaction):
@@ -736,7 +742,7 @@ class Music(commands.Cog):
             await self._send_embed(
                 interaction,
                 EmbedBuilder.info(
-                    "ðŸ“‚ Playlist Kosong",
+                    "📂 Playlist Kosong",
                     "Belum ada playlist yang disimpan untuk server ini.\n"
                     "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
                 ),
@@ -755,7 +761,7 @@ class Music(commands.Cog):
         if not playlists:
             await interaction.response.send_message(
                 embed=EmbedBuilder.info(
-                    "ðŸ“‚ Playlist Kosong",
+                    "📂 Playlist Kosong",
                     "Belum ada playlist yang disimpan untuk server ini.\n"
                     "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
                 ),
@@ -767,18 +773,18 @@ class Music(commands.Cog):
         for i, pl in enumerate(playlists, start=1):
             name = str(pl.get("name", "Untitled"))
             track_count = len(pl.get("tracks") or [])
-            lines.append(f"`{i}.` **{name}** â€” {track_count} lagu")
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
         
         # Max description is 4096 chars, 100 playlists should fit.
         # If not, we can chunk it, but we keep it simple here.
         embed = discord.Embed(
-            title="ðŸ“‚ Daftar Playlist Server",
+            title="📂 Daftar Playlist Server",
             description="\n".join(lines)[:4096],
             color=discord.Color.from_rgb(138, 43, 226),
         )
         await self._send_embed(interaction, embed)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /playlistdelete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /playlistdelete ───────────────────────
 
     @app_commands.command(name="playlistdelete", description="Hapus playlist yang tersimpan di server")
     async def playlistdelete(self, interaction: discord.Interaction):
@@ -788,7 +794,7 @@ class Music(commands.Cog):
             await self._send_embed(
                 interaction,
                 EmbedBuilder.info(
-                    "ðŸ“‚ Playlist Kosong",
+                    "📂 Playlist Kosong",
                     "Belum ada playlist yang disimpan untuk server ini.\n"
                     "Gunakan `/playlistcopy` untuk menyalin playlist YouTube."
                 ),
@@ -800,7 +806,7 @@ class Music(commands.Cog):
         embed = view.build_embed()
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /move â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────── /move ───────────
 
     @app_commands.command(name="move", description="Pindahkan lagu di queue ke posisi lain")
     @app_commands.describe(from_pos="Posisi lagu sekarang (angka)", to_pos="Posisi tujuan (angka)")
@@ -841,7 +847,7 @@ class Music(commands.Cog):
              final_pos = max(1, min(to_pos, queue_size))
              await interaction.response.send_message(
                 embed=EmbedBuilder.success(
-                    "ðŸšš Moved",
+                    "🚚 Moved",
                     f"**{moved_track.title}** dipindahkan dari posisi **{from_pos}** ke **{final_pos}**."
                 )
             )
@@ -851,7 +857,7 @@ class Music(commands.Cog):
                 ephemeral=True
             )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /lyrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /lyrics ───────────────────────
 
     @app_commands.command(name="lyrics", description="Cari lirik lagu dari Genius")
     @app_commands.describe(query="Judul lagu (kosongkan untuk lagu yang sedang diputar)")
@@ -910,7 +916,7 @@ class Music(commands.Cog):
 
         for i, chunk in enumerate(chunks):
             embed = discord.Embed(
-                title=f"ðŸŽ¤ {result.get('title', search_query)}" if i == 0 else f"ðŸŽ¤ {result.get('title', search_query)} (lanjutan)",
+                title=f"🎤 {result.get('title', search_query)}" if i == 0 else f"🎤 {result.get('title', search_query)} (lanjutan)",
                 description=chunk,
                 color=color
             )
@@ -920,21 +926,21 @@ class Music(commands.Cog):
                 
                 if source == 'Genius':
                     embed.add_field(
-                        name="ðŸ”— Genius",
+                        name="🔗 Genius",
                         value=f"[Lihat di Genius]({result['url']})",
                         inline=True
                     )
                     if result.get('thumbnail'):
                         embed.set_thumbnail(url=result['thumbnail'])
             
-            embed.set_footer(text=f"Omnia Music ðŸŽ¶ â€¢ Lyrics powered by {source}")
+            embed.set_footer(text=f"Omnia Music 🎶 • Lyrics powered by {source}")
 
             msg = await interaction.followup.send(embed=embed, wait=True)
             # Track for auto-delete when song changes
             player = self.get_player(interaction.guild)
             player.lyrics_messages.append(msg)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Playlist Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── Playlist Helpers ───────────────────────
 
     def _build_playlist_display_name(self, base_name: str, user: discord.abc.User) -> str:
         """Build stored playlist name with username suffix."""
@@ -942,7 +948,7 @@ class Music(commands.Cog):
         username = getattr(user, "display_name", None) or user.name
         return f"{base_name} - {username}"
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /playlistcopy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /playlistcopy ───────────────────────
 
     @app_commands.command(
         name="playlistcopy",
@@ -1037,19 +1043,19 @@ class Music(commands.Cog):
         await self._send_embed(
             interaction,
             EmbedBuilder.success(
-                "âœ… Playlist Disalin",
+                "✅ Playlist Disalin",
                 f"Playlist **{stored_name}** berhasil disimpan untuk server ini.\n"
                 f"Total lagu tersimpan: **{len(tracks_data)}**.{note}"
             )
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /loop ───────────────────────
 
     @app_commands.command(name="loop", description="Atur mode loop")
     @app_commands.describe(mode="Mode loop: off, single, atau queue")
     @app_commands.choices(mode=[
-        app_commands.Choice(name="ðŸš« Off", value="off"),
-        app_commands.Choice(name="ðŸ”‚ Single", value="single"),
+        app_commands.Choice(name="🚫 Off", value="off"),
+        app_commands.Choice(name="🔂 Single", value="single"),
         app_commands.Choice(name="ðŸ” Queue", value="queue"),
     ])
     async def loop(self, interaction: discord.Interaction, mode: str):
@@ -1073,12 +1079,12 @@ class Music(commands.Cog):
             )
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /autoplay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /autoplay ───────────────────────
 
     @app_commands.command(name="autoplay", description="Atur mode autoplay")
     @app_commands.describe(mode="Pilih mode autoplay: off, youtube, custom1, atau custom2")
     @app_commands.choices(mode=[
-        app_commands.Choice(name="ðŸ”„ Off", value="off"),
+        app_commands.Choice(name="🔄 Off", value="off"),
         app_commands.Choice(name="â–¶ï¸ YouTube", value="youtube"),
         app_commands.Choice(name="1ï¸âƒ£ Custom 1", value="custom1"),
         app_commands.Choice(name="2ï¸âƒ£ Custom 2", value="custom2"),
@@ -1106,7 +1112,7 @@ class Music(commands.Cog):
             desc = "Bot menggunakan rekomendasi eksploratif yang prioritasnya mencari artis/genre baru."
         else:
             player.autoplay_mode = AutoplayMode.OFF
-            status = "Off ðŸ”„"
+            status = "Off 🔄"
             desc = "Autoplay dimatikan."
 
         # Trigger preload check if enabled
@@ -1115,10 +1121,10 @@ class Music(commands.Cog):
 
         await self._send_embed(
             interaction,
-            EmbedBuilder.success(f"ðŸ”„ Autoplay: {status}", desc)
+            EmbedBuilder.success(f"🔄 Autoplay: {status}", desc)
         )
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /status ───────────────────────
 
     @app_commands.command(name="status", description="Tampilkan status bot musik")
     async def status(self, interaction: discord.Interaction):
@@ -1127,26 +1133,26 @@ class Music(commands.Cog):
         vc = interaction.guild.voice_client
 
         embed = discord.Embed(
-            title="ðŸ¤– Status Bot Musik",
+            title="🤖 Status Bot Musik",
             color=discord.Color.from_rgb(138, 43, 226)
         )
 
         # Connection status
         if vc and vc.is_connected():
             embed.add_field(
-                name="ðŸ”Š Voice Channel",
+                name="🔊 Voice Channel",
                 value=vc.channel.name,
                 inline=True
             )
             members = [m.display_name for m in vc.channel.members if not m.bot]
             embed.add_field(
-                name="ðŸ‘¥ Pendengar",
+                name="👥 Pendengar",
                 value=", ".join(members) if members else "Tidak ada",
                 inline=True
             )
         else:
             embed.add_field(
-                name="ðŸ”‡ Voice Channel",
+                name="🔇 Voice Channel",
                 value="Tidak terhubung",
                 inline=True
             )
@@ -1157,7 +1163,7 @@ class Music(commands.Cog):
             if len(title) > 40:
                 title = title[:37] + "..."
             embed.add_field(
-                name="ðŸŽµ Sedang Diputar",
+                name="🎵 Sedang Diputar",
                 value=f"**[{title}]({player.current.url})** [{player.current.duration_str}]",
                 inline=False
             )
@@ -1165,10 +1171,10 @@ class Music(commands.Cog):
             if progress:
                 embed.add_field(name="â³ Progress", value=progress, inline=False)
         else:
-            embed.add_field(name="ðŸŽµ Sedang Diputar", value="Tidak ada", inline=False)
+            embed.add_field(name="🎵 Sedang Diputar", value="Tidak ada", inline=False)
 
         # Queue
-        embed.add_field(name="ðŸ“‹ Queue", value=f"{player.queue.size} lagu", inline=True)
+        embed.add_field(name="📋 Queue", value=f"{player.queue.size} lagu", inline=True)
 
         # Loop mode
         loop_icons = {"off": "ðŸš« Off", "single": "ðŸ”‚ Single", "queue": "ðŸ” Queue"}
@@ -1178,8 +1184,8 @@ class Music(commands.Cog):
             inline=True
         )
 
-        # Autoplay â€” cycle: Off â†’ YouTube â†’ Custom 1 â†’ Custom 2 â†’ Off
-        ap_status = "Off ðŸ”„"
+        # Autoplay — cycle: Off → YouTube → Custom 1 → Custom 2 → Off
+        ap_status = "Off 🔄"
         if player.autoplay_mode == AutoplayMode.YOUTUBE:
             ap_status = "YouTube â–¶ï¸"
         elif player.autoplay_mode == AutoplayMode.CUSTOM:
@@ -1188,7 +1194,7 @@ class Music(commands.Cog):
             ap_status = "Custom 2 2ï¸âƒ£"
             
         embed.add_field(
-            name="ðŸ”„ Autoplay",
+            name="🔄 Autoplay",
             value=ap_status,
             inline=True
         )
@@ -1208,15 +1214,15 @@ class Music(commands.Cog):
             sleep_text = "Tidak aktif"
 
         embed.add_field(
-            name="ðŸ˜´ Sleep Timer",
+            name="😴 Sleep Timer",
             value=sleep_text,
             inline=True
         )
 
-        embed.set_footer(text="Omnia Music ðŸŽ¶")
+        embed.set_footer(text="Omnia Music 🎶")
         await self._send_embed(interaction, embed)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ /help â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── /help ───────────────────────
 
     @app_commands.command(name="radio", description="Pilih radio live berdasarkan kategori")
     async def radio(self, interaction: discord.Interaction):
@@ -1231,7 +1237,7 @@ class Music(commands.Cog):
     async def help(self, interaction: discord.Interaction):
         """Show all available commands."""
         embed = discord.Embed(
-            title="ðŸ“– Daftar Command Omnia Music",
+            title="📖 Daftar Command Omnia Music",
             description="Berikut adalah command yang tersedia:",
             color=discord.Color.from_rgb(138, 43, 226)
         )
@@ -1253,10 +1259,10 @@ class Music(commands.Cog):
         embed.add_field(name="/playlistdelete", value="Hapus playlist yang tersimpan di server", inline=False)
         embed.add_field(name="/radio", value="Pilih radio live berdasarkan kategori genre, mood, news, local, dan lainnya", inline=False)
         embed.add_field(name="/help", value="Tampilkan daftar command ini", inline=False)
-        embed.set_footer(text="Omnia Music ðŸŽ¶")
+        embed.set_footer(text="Omnia Music 🎶")
         await self._send_embed(interaction, embed)
 
-    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Voice State Listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ─────────────────────── Voice State Listener ───────────────────────
 
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -1290,7 +1296,7 @@ class Music(commands.Cog):
                 # Count non-bot members
                 human_members = [m for m in before.channel.members if not m.bot]
                 if len(human_members) == 0:
-                    # Bot is alone â€” wait a moment then disconnect
+                    # Bot is alone — wait a moment then disconnect
                     await asyncio.sleep(10)  # Give 10 seconds grace period
 
                     # Re-check
@@ -1300,7 +1306,7 @@ class Music(commands.Cog):
                             player = self.get_player(member.guild)
                             if player.text_channel:
                                 embed = EmbedBuilder.info(
-                                    "ðŸ‘‹ Auto Disconnect",
+                                    "👋 Auto Disconnect",
                                     "Bot keluar karena sendirian di voice channel."
                                 )
                                 try:
@@ -1328,8 +1334,8 @@ class PlaylistSelectView(discord.ui.View):
 
         self.playlist_select.options = self._build_options()
 
-        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="â—€ Previous", row=1, custom_id="pl_sel_prev")
-        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next â–¶", row=1, custom_id="pl_sel_next")
+        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="◀ Previous", row=1, custom_id="pl_sel_prev")
+        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next ▶", row=1, custom_id="pl_sel_next")
         prev_btn.callback = self._on_prev
         next_btn.callback = self._on_next
         self.add_item(prev_btn)
@@ -1365,12 +1371,12 @@ class PlaylistSelectView(discord.ui.View):
         for i, pl in enumerate(slice_pl, start=start + 1):
             name = str(pl.get("name", "Untitled"))
             track_count = len(pl.get("tracks") or [])
-            lines.append(f"`{i}.` **{name}** â€” {track_count} lagu")
-        page_note = f"\n\nðŸ“„ Halaman **{self._current_page + 1}** / **{self._total_pages}**"
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
+        page_note = f"\n\n📄 Halaman **{self._current_page + 1}** / **{self._total_pages}**"
         if total > PAGE_SIZE:
-            page_note += f" â€¢ Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
+            page_note += f" • Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
         embed = discord.Embed(
-            title="ðŸ“‚ Playlist Server",
+            title="📂 Playlist Server",
             description="\n".join(lines) + page_note,
             color=discord.Color.from_rgb(138, 43, 226),
         )
@@ -1484,7 +1490,7 @@ class PlaylistSelectView(discord.ui.View):
 
         await interaction.followup.send(
             embed=EmbedBuilder.success(
-                "ðŸŽ¶ Playlist Diputar",
+                "🎶 Playlist Diputar",
                 f"Menambahkan playlist **{playlist.get('name', 'Untitled')}** "
                 f"({len(tracks_data)} lagu) ke queue."
             )
@@ -1504,8 +1510,8 @@ class PlaylistDeleteView(discord.ui.View):
 
         self.playlist_select.options = self._build_options()
 
-        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="â—€ Previous", row=1, custom_id="pl_del_prev")
-        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next â–¶", row=1, custom_id="pl_del_next")
+        prev_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="◀ Previous", row=1, custom_id="pl_del_prev")
+        next_btn = discord.ui.Button(style=discord.ButtonStyle.secondary, label="Next ▶", row=1, custom_id="pl_del_next")
         prev_btn.callback = self._on_prev
         next_btn.callback = self._on_next
         self.add_item(prev_btn)
@@ -1541,10 +1547,10 @@ class PlaylistDeleteView(discord.ui.View):
         for i, pl in enumerate(slice_pl, start=start + 1):
             name = str(pl.get("name", "Untitled"))
             track_count = len(pl.get("tracks") or [])
-            lines.append(f"`{i}.` **{name}** â€” {track_count} lagu")
-        page_note = f"\n\nðŸ“„ Halaman **{self._current_page + 1}** / **{self._total_pages}**"
+            lines.append(f"`{i}.` **{name}** — {track_count} lagu")
+        page_note = f"\n\n📄 Halaman **{self._current_page + 1}** / **{self._total_pages}**"
         if total > PAGE_SIZE:
-            page_note += f" â€¢ Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
+            page_note += f" • Total **{total}** playlist. Gunakan tombol di bawah untuk pindah halaman."
         embed = discord.Embed(
             title="ðŸ—‘ï¸ Hapus Playlist Server",
             description="\n".join(lines) + page_note,
@@ -1668,11 +1674,11 @@ class RadioCategoryView(discord.ui.View):
             "`Lainnya` untuk oldies, world, instrumental, dan opsi tambahan.",
         ]
         embed = discord.Embed(
-            title="ðŸ“» Radio",
+            title="📻 Radio",
             description="Pilih kategori dulu, lalu pilih stasiun yang ingin diputar.\n\n" + "\n".join(lines),
             color=discord.Color.from_rgb(138, 43, 226),
         )
-        embed.set_footer(text="Omnia Music ðŸŽ¶")
+        embed.set_footer(text="Omnia Music 🎶")
         return embed
 
     async def _on_category_select(self, interaction: discord.Interaction):
@@ -1745,12 +1751,12 @@ class RadioStationView(discord.ui.View):
 
         self.prev_button = discord.ui.Button(
             style=discord.ButtonStyle.secondary,
-            label="â—€ Previous",
+            label="◀ Previous",
             row=1,
         )
         self.next_button = discord.ui.Button(
             style=discord.ButtonStyle.secondary,
-            label="Next â–¶",
+            label="Next ▶",
             row=1,
         )
         self.back_button = discord.ui.Button(
@@ -1801,11 +1807,11 @@ class RadioStationView(discord.ui.View):
         for i, station in enumerate(slice_stations, start=start + 1):
             name = str(station.get("name", "Unknown Station"))
             desc = str(station.get("description", "Radio stream"))
-            lines.append(f"`{i}.` **{name}** â€” {desc}")
+            lines.append(f"`{i}.` **{name}** — {desc}")
 
         page_note = f"\n\nHalaman **{self._current_page + 1}** / **{self._total_pages}**"
         embed = discord.Embed(
-            title=f"ðŸ“» Radio â€¢ {self._category_label()}",
+            title=f"📻 Radio • {self._category_label()}",
             description="\n".join(lines) + page_note,
             color=discord.Color.from_rgb(30, 144, 255),
         )
@@ -1916,7 +1922,7 @@ class RadioStationView(discord.ui.View):
         station_homepage = str(station.get("homepage") or stream_url)
         await interaction.edit_original_response(
             embed=EmbedBuilder.success(
-                "ðŸ“» Radio Diputar",
+                "📻 Radio Diputar",
                 f"Sedang memutar **[{station_name}]({station_homepage})**.",
             ),
             view=None,

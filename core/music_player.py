@@ -512,6 +512,17 @@ class MusicPlayer:
         # Get next track
         next_track = await self.queue.get_next()
 
+        # If queue is empty but a playlist is still being loaded in background,
+        # wait briefly for new tracks to arrive (e.g. user skipped the first song
+        # before the background loader added track #2).
+        if next_track is None and self._playlist_enqueue_token > 0:
+            for _wait_i in range(16):  # up to ~8 seconds
+                await asyncio.sleep(0.5)
+                next_track = await self.queue.get_next()
+                if next_track is not None:
+                    logger.info("play_next: waited for playlist background and got a track")
+                    break
+
         if next_track:
             # If we are playing from queue, any previous autoplay recommendation is stale
             self._next_autoplay = None

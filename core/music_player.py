@@ -76,6 +76,7 @@ class MusicPlayer:
         self._progress_task: asyncio.Task | None = None
         self._active_source: discord.AudioSource | None = None
         self._playlist_enqueue_token = 0
+        self._play_next_lock = asyncio.Lock()
 
     @property
     def voice_client(self) -> discord.VoiceClient | None:
@@ -365,6 +366,16 @@ class MusicPlayer:
         """Add a track to the queue. Returns position."""
         position = await self.queue.add(track)
         return position
+
+    async def ensure_playing(self):
+        """Start playback if idle and there is something queued."""
+        if self.is_playing:
+            return
+
+        async with self._play_next_lock:
+            if self.is_playing or self.queue.size == 0:
+                return
+            await self.play_next()
 
     def begin_playlist_enqueue(self) -> int:
         """Start a new playlist enqueue generation and return its token."""

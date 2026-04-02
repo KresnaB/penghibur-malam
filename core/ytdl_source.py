@@ -269,7 +269,13 @@ class YTDLSource(discord.PCMVolumeTransformer):
         return None
 
     @classmethod
-    async def get_info(cls, query: str, *, loop: asyncio.AbstractEventLoop = None):
+    async def get_info(
+        cls,
+        query: str,
+        *,
+        loop: asyncio.AbstractEventLoop = None,
+        playlist_items: str | None = None,
+    ):
         """
         Extract track info without downloading audio.
         Handles playlists and single tracks.
@@ -296,7 +302,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
         elif not is_search and 'list=' in query:
             # Regular playlist: extract flat for speed
             opts['extract_flat'] = 'in_playlist'
-            opts['playlistend'] = 50  # Limit to 50 songs max
+            if playlist_items:
+                opts['playlist_items'] = playlist_items
+            else:
+                opts['playlistend'] = 50  # Limit to 50 songs max
         elif is_search:
              # Search: use extract_flat to avoid downloading audio stream metadata up-front, making responses instant
             opts['extract_flat'] = 'in_playlist'

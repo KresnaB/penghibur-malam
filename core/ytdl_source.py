@@ -74,7 +74,6 @@ BASE_YTDL_FORMAT_OPTIONS = {
         # Make sure PO Token provider finds the URL (plugin namespace is pot:bgutil:http)
         'pot:bgutil:http': [f'base_url={POT_PROVIDER_URL}']
     },
-    'cachedir': False,
 }
 
 if USE_COOKIES and os.path.isfile(COOKIE_FILE):
@@ -89,6 +88,22 @@ if VISITOR_DATA:
     )
     logger.info("Using yt-dlp visitor_data from environment")
 
+def _prewarm_ytdlp_cache():
+    """Download YT player JS and helper plugins in background so the first playback is instant."""
+    try:
+        logger.info("Pre-warming yt-dlp cache in background...")
+        # 'jNQXAC9IVRw' = Me at the zoo (Shortest, highly available video)
+        # Using a full extraction to force yt-dlp to cache player JS and remote_components
+        opts = copy.deepcopy(BASE_YTDL_FORMAT_OPTIONS)
+        opts['quiet'] = True
+        ydl = yt_dlp.YoutubeDL(opts)
+        ydl.extract_info("https://www.youtube.com/watch?v=jNQXAC9IVRw", download=False)
+        logger.info("✅ Pre-warming yt-dlp cache complete. Music will load faster.")
+    except Exception as e:
+        logger.warning(f"⚠️ Pre-warming yt-dlp cache failed: {e}")
+
+import threading
+threading.Thread(target=_prewarm_ytdlp_cache, daemon=True).start()
 
 def build_ytdl_options(**overrides):
     """Build yt-dlp options while preserving PO Token provider settings."""

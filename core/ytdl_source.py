@@ -70,10 +70,9 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'allow_unplayable_formats': True,
     # Use mobile clients (android, ios) which are more reliable for audio extraction
     'extractor_args': {
-        'youtube': ['player_client=ios,android'],
-        # Support various plugin versions for PO Token provider
-        'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}'],
-        'youtubepot_bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
+        'youtube': ['player_client=ios,android,tv'],
+        # Make sure PO Token provider finds the URL (plugin namespace is pot:bgutil:http)
+        'pot:bgutil:http': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,
 }

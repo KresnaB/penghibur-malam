@@ -49,7 +49,7 @@ logger.info(f"Using PO Token provider base URL: {POT_PROVIDER_URL}")
 
 # yt-dlp configuration
 BASE_YTDL_FORMAT_OPTIONS = {
-    'format': 'bestaudio/bestaudio*/best/best*',
+    'format': 'bestaudio/best',
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
@@ -65,11 +65,9 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'extract_flat': False,
     # Enable Node.js as JS runtime (yt-dlp only enables deno by default)
     'js_runtimes': {'node': {}, 'deno': {}},
-    # Use mweb client (supports PO Token) + PO Token Provider server
+    # Use mobile clients (android, ios) which are more reliable for audio extraction
     'extractor_args': {
-        # Let yt-dlp choose the best authenticated YouTube clients by default.
-        # Forcing mweb has been causing "Only images are available" on some videos.
-        'youtube': [],
+        'youtube': ['player_client=android,ios,web'],
         'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,

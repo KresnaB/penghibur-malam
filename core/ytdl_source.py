@@ -65,9 +65,11 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'extract_flat': False,
     # Enable Node.js as JS runtime (yt-dlp only enables deno by default)
     'js_runtimes': {'node': {}, 'deno': {}},
+    # Download helper scripts for JS challenge solving
+    'remote_components': 'ejs:github',
     # Use mobile clients (android, ios) which are more reliable for audio extraction
     'extractor_args': {
-        'youtube': ['player_client=android,ios,web'],
+        'youtube': ['player_client=ios,android'],
         'youtubepot-bgutilhttp': [f'base_url={POT_PROVIDER_URL}']
     },
     'cachedir': False,

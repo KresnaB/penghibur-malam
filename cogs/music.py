@@ -424,7 +424,7 @@ class Music(commands.Cog):
             if player.current and (not player.voice_client or not player.voice_client.is_connected()):
                 player.current = None
             # Fire-and-forget so playback begins while we still respond to the user
-            asyncio.create_task(player.play_next())
+            asyncio.create_task(player.ensure_playing())
 
         # Start background loading of remaining playlist tracks
         if is_playlist_query:
@@ -1486,7 +1486,7 @@ class PlaylistSelectView(discord.ui.View):
         if not player.is_playing:
             if player.current and (not player.voice_client or not player.voice_client.is_connected()):
                 player.current = None
-            await player.play_next()
+            await player.ensure_playing()
 
         await interaction.followup.send(
             embed=EmbedBuilder.success(
@@ -1910,7 +1910,7 @@ class RadioStationView(discord.ui.View):
             await player.add_track(radio_track)
             if player.current and (not player.voice_client or not player.voice_client.is_connected()):
                 player.current = None
-            await player.play_next()
+            await player.ensure_playing()
         except Exception as e:
             await interaction.edit_original_response(
                 embed=EmbedBuilder.error(f"Gagal memutar stasiun radio: `{e}`"),

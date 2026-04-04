@@ -369,11 +369,11 @@ class MusicPlayer:
 
     async def ensure_playing(self):
         """Start playback if idle and there is something queued."""
-        if self.is_playing:
+        if self.is_playing or getattr(self, '_play_next_running', False):
             return
 
         async with self._play_next_lock:
-            if self.is_playing or self.queue.size == 0:
+            if self.is_playing or getattr(self, '_play_next_running', False) or self.queue.size == 0:
                 return
             await self.play_next()
 
@@ -442,6 +442,16 @@ class MusicPlayer:
 
     async def play_next(self):
         """Play the next track in the queue."""
+        if getattr(self, '_play_next_running', False):
+            return
+            
+        self._play_next_running = True
+        try:
+            await self._do_play_next()
+        finally:
+            self._play_next_running = False
+
+    async def _do_play_next(self):
         # If we're in the middle of a seek, the old source's after_play fired — ignore it
         if getattr(self, '_seeking', False):
             self._seeking = False
@@ -648,7 +658,7 @@ class MusicPlayer:
                 await asyncio.sleep(2 ** attempts)
 
             # Try next track. If the same track was refunded, it will be retried first.
-            await self.play_next()
+            await self._do_play_next()
             return
 
         # Send embed OUTSIDE the try block — embed errors won't trigger play_next

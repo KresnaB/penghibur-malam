@@ -11,8 +11,8 @@ services:
     environment:
       NODE_ENV: production
       POT_PROVIDER_URL: http://pot-provider:4416
-      YTDLP_USE_COOKIES: "${YTDLP_USE_COOKIES:-1}"
-      TZ: "${TZ:-Asia/Jakarta}"
+      YTDLP_USE_COOKIES: "1"
+      TZ: "Asia/Jakarta"
     volumes:
       - ./data:/app/data
       - ./cookies.txt:/app/cookies.txt:ro

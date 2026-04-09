@@ -1,36 +1,31 @@
-# Gunakan Python 3.11-slim (ringan & modern)
-FROM python:3.11-slim
+FROM node:20-bookworm-slim
 
-# Install dependencies sistem (ffmpeg, git, nodejs, build-essential for C-extensions)
+ENV NODE_ENV=production \
+    YTDLP_COOKIEFILE=/app/cookies.txt \
+    PATH="/root/.local/bin:${PATH}"
+
 RUN apt-get update && \
-    apt-get install -y ffmpeg git curl build-essential libffi-dev python3-dev && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/* && \
-    node --version && echo "Node.js installed OK"
+    apt-get install -y --no-install-recommends \
+      ffmpeg \
+      python3 \
+      python3-pip \
+      ca-certificates \
+      curl \
+      tini && \
+    pip3 install --break-system-packages --no-cache-dir \
+      "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master" \
+      bgutil-ytdlp-pot-provider && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements dan install
-COPY requirements.txt .
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
-# Install yt-dlp first (from git master)
-RUN pip install --no-cache-dir "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master"
+COPY src ./src
+COPY data ./data
+COPY README.md ./
 
-# Install remaining requirements
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Force reinstall voice libraries to ensure DAVE protocol support (NaCl extensions)
-RUN pip install --no-cache-dir --force-reinstall discord.py[voice] PyNaCl
-
-# Install PO Token plugin explicitly and verify
-RUN pip install --no-cache-dir --force-reinstall bgutil-ytdlp-pot-provider && \
-    python -c "import bgutil_ytdlp_pot_provider; print('PO Token plugin installed successfully')" && \
-    ls -la /usr/local/lib/python3.11/site-packages/yt_dlp_plugins/ || true
-
-# Copy seluruh kode project
-COPY . .
-
-# Command untuk menjalankan bot
-CMD ["python", "main.py"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "src/index.js"]

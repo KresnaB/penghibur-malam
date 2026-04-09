@@ -1,27 +1,35 @@
-version: '2.2'
-
 services:
   penghibur-malam:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: penghibur_malam
     restart: unless-stopped
-    volumes:
-      # Mount file cookies.txt agar bot bisa baca
-      - ./cookies.txt:/app/cookies.txt
-      # Persist data (termasuk playlists.json)
-      - ./data:/app/data
-      # (Opsional) Persist log jika perlu
-      # - ./logs:/app/logs
+    init: true
     env_file:
       - .env
     environment:
-      - PYTHONUNBUFFERED=1
+      NODE_ENV: production
+      POT_PROVIDER_URL: http://pot-provider:4416
+      YTDLP_USE_COOKIES: "${YTDLP_USE_COOKIES:-1}"
+      TZ: "${TZ:-Asia/Jakarta}"
+    volumes:
+      - ./data:/app/data
+      - ./cookies.txt:/app/cookies.txt:ro
     depends_on:
-      - pot-provider
+      pot-provider:
+        condition: service_healthy
 
   pot-provider:
-    image: brainicism/bgutil-ytdlp-pot-provider
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
     container_name: pot_provider
     restart: unless-stopped
+    init: true
     ports:
       - "4416:4416"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4416/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s

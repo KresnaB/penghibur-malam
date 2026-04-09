@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+bot.log
+yt_dlp_err.txt
+.git
+.gitignore
+__pycache__
+*.pyc
+tests
+.env

@@ -1,3 +1,5 @@
+version: "2.1"
+
 services:
   penghibur-malam:
     build:
@@ -5,7 +7,6 @@ services:
       dockerfile: Dockerfile
     container_name: penghibur_malam
     restart: unless-stopped
-    init: true
     env_file:
       - .env
     environment:
@@ -17,14 +18,12 @@ services:
       - ./data:/app/data
       - ./cookies.txt:/app/cookies.txt:ro
     depends_on:
-      pot-provider:
-        condition: service_healthy
+      - pot-provider
 
   pot-provider:
     image: brainicism/bgutil-ytdlp-pot-provider:latest
     container_name: pot_provider
     restart: unless-stopped
-    init: true
     ports:
       - "4416:4416"
     healthcheck:

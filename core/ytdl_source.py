@@ -70,8 +70,13 @@ BASE_YTDL_FORMAT_OPTIONS = {
     'allow_unplayable_formats': True,
     # Use mobile clients (android, ios) which are more reliable for audio extraction
     'extractor_args': {
-        'youtube': ['player_client=ios,android,tv'],
-        # Make sure PO Token provider finds the URL (plugin namespace is pot:bgutil:http)
+        'youtube': [
+            'player_client=ios,android,web',
+            f'pot_provider=bgutil:http',
+            f'pot_provider_base_url={POT_PROVIDER_URL}'
+        ],
+        # Backup keys for different plugin versions/naming schemes
+        'pot': [f'base_url={POT_PROVIDER_URL}'],
         'pot:bgutil:http': [f'base_url={POT_PROVIDER_URL}']
     },
 }
@@ -479,6 +484,11 @@ class YTDLSource(discord.PCMVolumeTransformer):
                 raise e
         
         if not data and last_error:
+            error_msg = str(last_error)
+            if '403' in error_msg or 'forbidden' in error_msg.lower():
+                logger.error("❌ ERROR 403 Forbidden: YouTube is blocking the request.")
+                logger.error("👉 ACTION REQUIRED: Your cookies.txt is likely expired. Please refresh it.")
+                logger.error("👉 ALSO: Check if the PO Token server (pot-provider) is running correctly.")
             raise last_error
 
         if 'entries' in data:
@@ -584,7 +594,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
                             continue
                         related.append({
                             'url': entry_url,
-                            'title': entry.get('title', 'Unknown')
+                            'title': entry_url
                         })
                 if related:
                     logger.info(f"Autoplay: Found {len(related)} tracks from YouTube Search")

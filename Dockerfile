@@ -9,6 +9,7 @@ RUN apt-get update && \
       ffmpeg \
       python3 \
       python3-pip \
+      git \
       ca-certificates \
       curl \
       tini && \
